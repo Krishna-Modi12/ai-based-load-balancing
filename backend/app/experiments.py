@@ -231,6 +231,12 @@ async def execute_run(run_id: str, settings: Settings) -> None:
                 json={"policy": config.policy},
             )
             policy_response.raise_for_status()
+            if config.scenario != "stale_telemetry":
+                health_response = await control.post(
+                    f"{config.target_base_url.rstrip('/')}/api/v1/backends/health-check-all",
+                    headers=headers,
+                )
+                health_response.raise_for_status()
             if config.scenario == "node_failure":
                 backends_response = await control.get(f"{config.target_base_url.rstrip('/')}/api/v1/backends")
                 backends_response.raise_for_status()
