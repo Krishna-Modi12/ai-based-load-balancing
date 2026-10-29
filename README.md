@@ -70,6 +70,10 @@ ai-based-load-balancing/
 - [GitHub workflow](docs/10-github-workflow.md)
 - [Implementation roadmap](docs/11-roadmap.md)
 - [Phase 7 experiment methodology and results](docs/phase-7-experiment-methodology.md)
+- [Phase 7 benchmark results](docs/phase-7-benchmark-results.md)
+- [Phase 8 research analysis](docs/phase-8-analysis.md)
+- [Phase 8 failure-mode results](docs/phase-8-failure-mode-results.md)
+- [Final project report](docs/FINAL_PROJECT_REPORT.md)
 - [Research notes and sources](docs/12-research-and-sources.md)
 - [Demo/viva script](docs/13-demo-script.md)
 - [Project proposal report (DOCX)](AI_Based_Load_Balancing_Project_Proposal.docx)
@@ -119,6 +123,13 @@ Run status, comparison data, and raw exports are available at
 `GET /api/v1/experiments/{id}/export?format=csv|json`. The dashboard displays
 completed-run comparisons only. See
 `docs/phase-7-experiment-methodology.md`; unexecuted results remain pending.
+
+The verified 36-run result is documented in
+`docs/phase-7-benchmark-results.md`. The measured AI policy was slower and
+lower-throughput than both baselines in all four profiles; this is a bounded
+local finding, not a universal claim. Phase 8 reliability evidence and the
+academic report are in `docs/phase-8-failure-mode-results.md`,
+`docs/phase-8-analysis.md`, and `docs/FINAL_PROJECT_REPORT.md`.
 
 ## Definition of done
 
