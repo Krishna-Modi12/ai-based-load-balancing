@@ -1,0 +1,12 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="900" height="420" viewBox="0 0 900 420">
+<rect width="900" height="420" fill="#fff"/>
+<text x="30" y="30" font-family="Arial" font-size="20" font-weight="bold">Phase 7 valid matrix: mean P95 latency (ms)</text>
+<text x="30" y="55" font-family="Arial" font-size="12">Lower is better; each bar is the mean of three repetitions.</text>
+<g font-family="Arial" font-size="12">
+<text x="30" y="95">uniform</text><rect x="150" y="80" width="102" height="18" fill="#4e79a7"/><text x="260" y="94">101.793 RR</text><rect x="390" y="80" width="113" height="18" fill="#59a14f"/><text x="510" y="94">113.226 LC</text><rect x="640" y="80" width="628" height="18" fill="#e15759"/><text x="650" y="115">628.114 AI</text>
+<text x="30" y="165">heterogeneous</text><rect x="150" y="150" width="208" height="18" fill="#4e79a7"/><text x="365" y="164">208.071 RR</text><rect x="390" y="150" width="145" height="18" fill="#59a14f"/><text x="545" y="164">145.489 LC</text><rect x="640" y="150" width="661" height="18" fill="#e15759"/><text x="650" y="185">661.133 AI</text>
+<text x="30" y="235">bursty</text><rect x="150" y="220" width="113" height="18" fill="#4e79a7"/><text x="270" y="234">112.783 RR</text><rect x="390" y="220" width="115" height="18" fill="#59a14f"/><text x="510" y="234">115.255 LC</text><rect x="640" y="220" width="583" height="18" fill="#e15759"/><text x="650" y="255">583.311 AI</text>
+<text x="30" y="305">mixed</text><rect x="150" y="290" width="208" height="18" fill="#4e79a7"/><text x="365" y="304">207.806 RR</text><rect x="390" y="290" width="136" height="18" fill="#59a14f"/><text x="535" y="304">135.841 LC</text><rect x="640" y="290" width="617" height="18" fill="#e15759"/><text x="650" y="325">616.824 AI</text>
+</g>
+<text x="30" y="390" font-family="Arial" font-size="12">RR = Round Robin; LC = Least Connections; AI = AI latency.</text>
+</svg>

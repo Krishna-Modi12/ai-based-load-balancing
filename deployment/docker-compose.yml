@@ -40,6 +40,7 @@ services:
       ADMIN_TOKEN: ${ADMIN_TOKEN:?Set ADMIN_TOKEN in .env}
       WORKER_URLS: worker-a=http://worker-a:8080=2,worker-b=http://worker-b:8080=1,worker-c=http://worker-c:8080=1
       MODEL_DIR: /models
+      TELEMETRY_STALE_SECONDS: "${TELEMETRY_STALE_SECONDS:-120}"
     ports: ["8000:8000"]
     volumes: [../ml/artifacts:/models]
   frontend:
