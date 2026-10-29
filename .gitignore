@@ -1,0 +1,41 @@
+# Secrets and local configuration
+.env
+.env.*
+!.env.example
+*.pem
+*.key
+
+# Python
+__pycache__/
+*.py[cod]
+.venv/
+venv/
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+.coverage
+htmlcov/
+
+# Node
+node_modules/
+dist/
+.vite/
+coverage/
+
+# Local state and generated artifacts
+*.log
+*.sqlite3
+*.db
+postgres-data/
+*.joblib
+*.pkl
+*.onnx
+!ml/models/README.md
+reports/generated/
+experiments/raw-local/
+
+# Editor / OS
+.vscode/
+.idea/
+.DS_Store
+Thumbs.db

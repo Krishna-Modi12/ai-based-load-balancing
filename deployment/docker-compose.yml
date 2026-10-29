@@ -1,0 +1,50 @@
+services:
+  db:
+    image: postgres:16-alpine
+    environment:
+      POSTGRES_DB: loadbalancer
+      POSTGRES_USER: loadbalancer
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-local-dev-only}
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U loadbalancer -d loadbalancer"]
+      interval: 5s
+      timeout: 3s
+      retries: 10
+    volumes: [postgres_data:/var/lib/postgresql/data]
+  worker-a:
+    build: ../workers
+    environment:
+      WORKER_ID: worker-a
+      BASE_DELAY_MS: "${WORKER_A_DELAY_MS:-15}"
+      FAIL_MODE: "${WORKER_A_FAIL_MODE:-false}"
+  worker-b:
+    build: ../workers
+    environment:
+      WORKER_ID: worker-b
+      BASE_DELAY_MS: "${WORKER_B_DELAY_MS:-60}"
+      FAIL_MODE: "${WORKER_B_FAIL_MODE:-false}"
+  worker-c:
+    build: ../workers
+    environment:
+      WORKER_ID: worker-c
+      BASE_DELAY_MS: "${WORKER_C_DELAY_MS:-30}"
+      FAIL_MODE: "${WORKER_C_FAIL_MODE:-false}"
+  api:
+    build:
+      context: ..
+      dockerfile: backend/Dockerfile
+    depends_on:
+      db: {condition: service_healthy}
+    environment:
+      DATABASE_URL: postgresql+psycopg://loadbalancer:${POSTGRES_PASSWORD:-local-dev-only}@db:5432/loadbalancer
+      ADMIN_TOKEN: ${ADMIN_TOKEN:?Set ADMIN_TOKEN in .env}
+      WORKER_URLS: worker-a=http://worker-a:8080=2,worker-b=http://worker-b:8080=1,worker-c=http://worker-c:8080=1
+      MODEL_DIR: /models
+    ports: ["8000:8000"]
+    volumes: [../ml/artifacts:/models]
+  frontend:
+    build: ../frontend
+    depends_on: [api]
+    ports: ["5173:80"]
+volumes:
+  postgres_data:
