@@ -49,7 +49,15 @@ Never let a browser request choose an arbitrary upstream URL. Accept only contro
 - `POST /api/v1/experiments/{experiment_id}/stop` — request stop.
 - `GET /api/v1/experiments` — list runs.
 - `GET /api/v1/experiments/{experiment_id}` — run config and aggregate metrics.
+- `GET /api/v1/experiments/{experiment_id}/status` — current lifecycle status.
 - `GET /api/v1/experiments/{experiment_id}/export?format=csv|json` — export available results.
+
+Phase 7 accepts `uniform`, `heterogeneous`, `bursty`, and `mixed` workload
+profiles, three repetitions by default, bounded warm-up/concurrency/rate
+settings, and separate `node_failure`, `stale_telemetry`, `missing_model`, and
+`timeout` scenarios. `GET /api/v1/experiments/{experiment_id}/results` is an
+alias for the detail endpoint. CSV exports contain raw request observations;
+JSON exports contain configuration, aggregate rows, and raw observations.
 
 ## Model
 - `GET /api/v1/models/status` — active version, trained sample count, fallback state, last training time.

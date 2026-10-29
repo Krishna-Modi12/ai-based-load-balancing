@@ -2,26 +2,37 @@ from __future__ import annotations
 
 import time
 import uuid
+import threading
+from datetime import datetime, timezone
 from contextlib import asynccontextmanager
+from concurrent.futures import ThreadPoolExecutor
+import csv
+import io
+import json
 
 import httpx
 from fastapi import Depends, FastAPI, Header, HTTPException, Query, Request
 from fastapi.middleware.cors import CORSMiddleware
-from fastapi.responses import JSONResponse
+from fastapi.responses import JSONResponse, StreamingResponse
 from sqlalchemy import func, select
 from sqlalchemy.orm import Session
 
 from .config import get_settings
 from .database import SessionLocal, get_db
 from .ml import load_active_predictor, train_model
-from .models import BackendNode, ModelVersion, RoutingDecision
+from .experiments import CANCEL_EVENTS, run_experiment_in_thread
+from .models import BackendNode, ExperimentMetric, ExperimentRun, ModelVersion, RoutingDecision
 from .routing import Router
-from .schemas import BackendCreate, BackendOut, BackendPatch, DecisionOut, PolicyUpdate
+from .schemas import (
+    BackendCreate, BackendOut, BackendPatch, DecisionOut, ExperimentConfig,
+    ExperimentDetail, ExperimentListItem, ExperimentOut, ExperimentMetricOut, PolicyUpdate,
+)
 from .services import collect_health, eligible_backends, feature_vector, latest_features
 
 settings = get_settings()
 router = Router()
 active_policy = "round_robin"
+experiment_executor = ThreadPoolExecutor(max_workers=2, thread_name_prefix="experiment")
 
 
 @asynccontextmanager
@@ -62,6 +73,121 @@ def ready(db: Session = Depends(get_db)):
 def system_status(db: Session = Depends(get_db)):
     model = db.scalar(select(ModelVersion).where(ModelVersion.is_active.is_(True)))
     return {"policy": active_policy, "model_ready": model is not None and load_active_predictor(db) is not None, "model_version": None if not model else model.version}
+
+
+def _experiment_payload(run: ExperimentRun, metrics: list[ExperimentMetric] | None = None) -> dict:
+    payload = {
+        "id": run.id, "name": run.name, "policy": run.policy,
+        "workload_profile": run.workload_profile, "repetition": run.repetition,
+        "scenario": run.scenario, "configuration_json": run.configuration_json,
+        "status": run.status, "started_at": run.started_at,
+        "ended_at": run.ended_at, "notes": run.notes,
+    }
+    if metrics is not None:
+        payload["metrics"] = metrics
+    return payload
+
+
+@app.post("/api/v1/experiments", response_model=ExperimentOut, status_code=201)
+def create_experiment(payload: ExperimentConfig, db: Session = Depends(get_db)):
+    run = ExperimentRun(
+        name=payload.name,
+        policy=payload.policy,
+        workload_profile=payload.workload_profile,
+        repetition=payload.repetition,
+        scenario=payload.scenario,
+        configuration_json=payload.model_dump(),
+        status="queued",
+        notes=payload.notes,
+    )
+    db.add(run)
+    db.commit()
+    db.refresh(run)
+    return run
+
+
+@app.get("/api/v1/experiments", response_model=list[ExperimentListItem])
+def list_experiments(limit: int = Query(50, ge=1, le=200), db: Session = Depends(get_db)):
+    runs = list(db.scalars(select(ExperimentRun).order_by(ExperimentRun.started_at.desc(), ExperimentRun.id.desc()).limit(limit)))
+    result = []
+    for run in runs:
+        metric = db.scalar(select(ExperimentMetric).where(
+            ExperimentMetric.experiment_id == run.id,
+            ExperimentMetric.metric_scope == "overall",
+        ))
+        result.append({**_experiment_payload(run), "metric": metric})
+    return result
+
+
+@app.get("/api/v1/experiments/{experiment_id}", response_model=ExperimentDetail)
+@app.get("/api/v1/experiments/{experiment_id}/results", response_model=ExperimentDetail)
+def experiment_detail(experiment_id: str, db: Session = Depends(get_db)):
+    run = db.get(ExperimentRun, experiment_id)
+    if not run:
+        raise HTTPException(404, "Experiment not found")
+    metrics = list(db.scalars(select(ExperimentMetric).where(
+        ExperimentMetric.experiment_id == experiment_id,
+        ).order_by(ExperimentMetric.metric_scope, ExperimentMetric.backend_id)))
+    return _experiment_payload(run, metrics)
+
+
+@app.get("/api/v1/experiments/{experiment_id}/status", response_model=ExperimentOut)
+def experiment_status(experiment_id: str, db: Session = Depends(get_db)):
+    run = db.get(ExperimentRun, experiment_id)
+    if not run:
+        raise HTTPException(404, "Experiment not found")
+    return run
+
+
+@app.post("/api/v1/experiments/{experiment_id}/start", response_model=ExperimentOut, dependencies=[Depends(require_admin)])
+def start_experiment(experiment_id: str, db: Session = Depends(get_db)):
+    run = db.get(ExperimentRun, experiment_id)
+    if not run:
+        raise HTTPException(404, "Experiment not found")
+    if run.status not in {"queued", "failed"}:
+        raise HTTPException(409, f"Experiment is already {run.status}")
+    run.status = "queued"
+    db.commit()
+    experiment_executor.submit(run_experiment_in_thread, experiment_id, settings)
+    db.refresh(run)
+    return run
+
+
+@app.post("/api/v1/experiments/{experiment_id}/stop", response_model=ExperimentOut, dependencies=[Depends(require_admin)])
+def stop_experiment(experiment_id: str, db: Session = Depends(get_db)):
+    run = db.get(ExperimentRun, experiment_id)
+    if not run:
+        raise HTTPException(404, "Experiment not found")
+    if run.status == "running":
+        CANCEL_EVENTS.setdefault(experiment_id, threading.Event()).set()
+    elif run.status == "queued":
+        run.status = "cancelled"
+        run.ended_at = datetime.now(timezone.utc)
+        db.commit()
+    db.refresh(run)
+    return run
+
+
+@app.get("/api/v1/experiments/{experiment_id}/export")
+def export_experiment(experiment_id: str, format: str = Query("json", pattern="^(csv|json)$"), db: Session = Depends(get_db)):
+    run = db.get(ExperimentRun, experiment_id)
+    if not run:
+        raise HTTPException(404, "Experiment not found")
+    metrics = list(db.scalars(select(ExperimentMetric).where(ExperimentMetric.experiment_id == experiment_id)))
+    if format == "json":
+        body = json.dumps({**_experiment_payload(run), "metrics": [_experiment_payload_metric(metric) for metric in metrics], "raw_samples": run.raw_results_json or []}, default=str)
+        return StreamingResponse(io.BytesIO(body.encode()), media_type="application/json", headers={"Content-Disposition": f'attachment; filename="{experiment_id}.json"'})
+    output = io.StringIO()
+    samples = run.raw_results_json or []
+    fieldnames = sorted({key for sample in samples for key in sample}) or ["request_count"]
+    writer = csv.DictWriter(output, fieldnames=fieldnames)
+    writer.writeheader()
+    writer.writerows(samples)
+    return StreamingResponse(iter([output.getvalue()]), media_type="text/csv", headers={"Content-Disposition": f'attachment; filename="{experiment_id}.csv"'})
+
+
+def _experiment_payload_metric(metric: ExperimentMetric) -> dict:
+    return {column.name: getattr(metric, column.name) for column in ExperimentMetric.__table__.columns if column.name not in {"id", "experiment_id"}}
 
 
 @app.get("/api/v1/backends", response_model=list[BackendOut])
@@ -134,9 +260,11 @@ async def proxy_demo(request_class: str = Query("normal", pattern="^(light|norma
     candidates = eligible_backends(db, settings)
     if not candidates: raise HTTPException(503, "NO_HEALTHY_BACKENDS")
     features = {node.id: latest_features(db, node, request_class) for node in candidates}
+    selection_start = time.perf_counter()
     if active_policy == "round_robin": route = router.select_round_robin(candidates)
     elif active_policy == "least_connections": route = router.select_least_connections(candidates)
     else: route = router.select_ai(candidates, {key: feature_vector(value) for key, value in features.items()}, load_active_predictor(db))
+    ai_inference_latency = (time.perf_counter() - selection_start) * 1000 if active_policy == "ai_latency" else None
     request_id, start = str(uuid.uuid4()), time.perf_counter()
     router.inflight[route.backend.id] = router.inflight.get(route.backend.id, 0) + 1
     status, response_payload, failure = None, None, None
@@ -149,8 +277,8 @@ async def proxy_demo(request_class: str = Query("normal", pattern="^(light|norma
     finally:
         router.inflight[route.backend.id] -= 1
     elapsed = (time.perf_counter() - start) * 1000
-    decision = RoutingDecision(request_id=request_id, policy=route.policy, selected_backend_id=route.backend.id, model_version_id=route.model_version_id, predicted_latency_ms=route.predicted_latency_ms, actual_latency_ms=elapsed, status_code=status, success=failure is None, request_class=request_class, fallback_reason=route.fallback_reason, failure_type=failure, features_json=features[route.backend.id])
+    decision = RoutingDecision(request_id=request_id, policy=route.policy, selected_backend_id=route.backend.id, model_version_id=route.model_version_id, predicted_latency_ms=route.predicted_latency_ms, actual_latency_ms=elapsed, ai_inference_latency_ms=ai_inference_latency, status_code=status, success=failure is None, request_class=request_class, fallback_reason=route.fallback_reason, failure_type=failure, features_json=features[route.backend.id])
     db.add(decision); db.commit()
     if failure:
         raise HTTPException(502, "UPSTREAM_REQUEST_FAILED")
-    return {"request_id": request_id, "backend": route.backend.name, "policy": route.policy, "predicted_latency_ms": route.predicted_latency_ms, "fallback_reason": route.fallback_reason, "upstream": response_payload}
+    return {"request_id": request_id, "backend": route.backend.name, "policy": route.policy, "predicted_latency_ms": route.predicted_latency_ms, "actual_latency_ms": elapsed, "ai_inference_latency_ms": ai_inference_latency, "fallback_reason": route.fallback_reason, "upstream": response_payload}

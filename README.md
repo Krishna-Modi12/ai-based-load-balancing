@@ -69,6 +69,7 @@ ai-based-load-balancing/
 - [Final report structure](docs/09-final-report-structure.md)
 - [GitHub workflow](docs/10-github-workflow.md)
 - [Implementation roadmap](docs/11-roadmap.md)
+- [Phase 7 experiment methodology and results](docs/phase-7-experiment-methodology.md)
 - [Research notes and sources](docs/12-research-and-sources.md)
 - [Demo/viva script](docs/13-demo-script.md)
 - [Project proposal report (DOCX)](AI_Based_Load_Balancing_Project_Proposal.docx)
@@ -98,6 +99,26 @@ pip install -r requirements-dev.txt
 $env:PYTHONPATH = (Get-Location).Path
 pytest -q
 ```
+
+### Phase 7 experiments
+
+The experiment API and CLI run measured, bounded workloads only. Defaults are
+safe (10-second measurement, 2-second warm-up, concurrency 4, three
+repetitions); use a longer duration only against the local Compose stack.
+
+```powershell
+cd "C:\Users\krish\OneDrive\Desktop\CN Project\ai_load_balancer_starter"
+$env:PYTHONPATH=(Join-Path (Get-Location) "backend")
+python -m app.experiment_cli --matrix
+# One run:
+python -m app.experiment_cli --policy least_connections --profile mixed --duration 30 --warmup 5
+```
+
+Run status, comparison data, and raw exports are available at
+`GET /api/v1/experiments`, `GET /api/v1/experiments/{id}/results`, and
+`GET /api/v1/experiments/{id}/export?format=csv|json`. The dashboard displays
+completed-run comparisons only. See
+`docs/phase-7-experiment-methodology.md`; unexecuted results remain pending.
 
 ## Definition of done
 
