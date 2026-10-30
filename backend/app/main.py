@@ -21,7 +21,7 @@ from .config import get_settings
 from .database import SessionLocal, get_db
 from .ml import load_active_predictor, train_model
 from .experiments import CANCEL_EVENTS, run_experiment_in_thread
-from .models import BackendNode, ExperimentMetric, ExperimentRun, ModelVersion, RoutingDecision, TelemetrySample
+from .models import BackendNode, ExperimentMetric, ExperimentRun, ModelVersion, RoutingDecision, RoutingPolicy, TelemetrySample
 from .routing import Router
 from .schemas import (
     BackendCreate, BackendDetail, BackendOut, BackendPatch, DecisionOut, ExperimentConfig,
@@ -39,6 +39,9 @@ experiment_executor = ThreadPoolExecutor(max_workers=2, thread_name_prefix="expe
 @asynccontextmanager
 async def lifespan(_: FastAPI):
     with SessionLocal() as db:
+        policy = db.get(RoutingPolicy, 1)
+        if policy is None:
+            db.add(RoutingPolicy(id=1, policy=active_policy))
         for name, url, capacity in settings.worker_configurations:
             if not db.scalar(select(BackendNode).where(BackendNode.name == name)):
                 db.add(BackendNode(name=name, base_url=url, capacity_weight=capacity))
@@ -85,7 +88,7 @@ def ready(db: Session = Depends(get_db)):
 @app.get("/api/v1/system/status")
 def system_status(db: Session = Depends(get_db)):
     model = db.scalar(select(ModelVersion).where(ModelVersion.is_active.is_(True)))
-    return {"policy": active_policy, "model_ready": model is not None and load_active_predictor(db) is not None, "model_version": None if not model else model.version}
+    return {"policy": _current_policy(db), "model_ready": model is not None and load_active_predictor(db) is not None, "model_version": None if not model else model.version}
 
 
 def _experiment_payload(run: ExperimentRun, metrics: list[ExperimentMetric] | None = None) -> dict:
@@ -261,20 +264,27 @@ def decisions(limit: int = Query(50, ge=1, le=200), db: Session = Depends(get_db
 
 
 @app.post("/api/v1/policies", dependencies=[Depends(require_admin)])
-def set_policy(payload: PolicyUpdate):
+def set_policy(payload: PolicyUpdate, db: Session = Depends(get_db)):
     global active_policy
     active_policy = payload.policy
+    policy = db.get(RoutingPolicy, 1)
+    if policy is None:
+        policy = RoutingPolicy(id=1, policy=payload.policy)
+        db.add(policy)
+    else:
+        policy.policy = payload.policy
+    db.commit()
     return {"policy": active_policy}
 
 
 @app.get("/api/v1/routing/mode", response_model=PolicyOut)
-def get_policy():
-    return {"policy": active_policy}
+def get_policy(db: Session = Depends(get_db)):
+    return {"policy": _current_policy(db)}
 
 
 @app.put("/api/v1/routing/mode", response_model=PolicyOut, dependencies=[Depends(require_admin)])
-def update_policy(payload: PolicyUpdate):
-    return set_policy(payload)
+def update_policy(payload: PolicyUpdate, db: Session = Depends(get_db)):
+    return set_policy(payload, db)
 
 
 @app.get("/api/v1/routing/decisions", response_model=list[DecisionOut])
@@ -362,10 +372,11 @@ async def proxy_demo(request_class: str = Query("normal", pattern="^(light|norma
     if not candidates: raise HTTPException(503, "NO_HEALTHY_BACKENDS")
     features = {node.id: latest_features(db, node, request_class) for node in candidates}
     selection_start = time.perf_counter()
-    if active_policy == "round_robin": route = router.select_round_robin(candidates)
-    elif active_policy == "least_connections": route = router.select_least_connections(candidates)
+    policy = _current_policy(db)
+    if policy == "round_robin": route = router.select_round_robin(candidates)
+    elif policy == "least_connections": route = router.select_least_connections(candidates)
     else: route = router.select_ai(candidates, {key: feature_vector(value) for key, value in features.items()}, load_active_predictor(db))
-    ai_inference_latency = (time.perf_counter() - selection_start) * 1000 if active_policy == "ai_latency" else None
+    ai_inference_latency = (time.perf_counter() - selection_start) * 1000 if policy == "ai_latency" else None
     request_id, start = str(uuid.uuid4()), time.perf_counter()
     router.inflight[route.backend.id] = router.inflight.get(route.backend.id, 0) + 1
     status, response_payload, failure = None, None, None
@@ -394,6 +405,11 @@ def _percentile(values: list[float], percentile: float) -> float | None:
     if not values:
         return None
     return values[min(len(values) - 1, int((len(values) - 1) * percentile))]
+
+
+def _current_policy(db: Session) -> str:
+    policy = db.get(RoutingPolicy, 1)
+    return policy.policy if policy else active_policy
 
 
 def _distribution(rows: list[RoutingDecision]) -> dict[str, int]:

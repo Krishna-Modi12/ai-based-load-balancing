@@ -2,11 +2,13 @@ from functools import lru_cache
 from pathlib import Path
 
 from pydantic_settings import BaseSettings, SettingsConfigDict
+from pydantic import model_validator
 
 
 class Settings(BaseSettings):
     database_url: str = "sqlite:///./load_balancer.db"
-    admin_token: str = "change-me"
+    admin_token: str = ""
+    app_env: str = "production"
     proxy_timeout_seconds: float = 3.0
     telemetry_stale_seconds: int = 30
     worker_urls: str = ""
@@ -14,6 +16,17 @@ class Settings(BaseSettings):
     cors_origins: str = "http://localhost:5173"
 
     model_config = SettingsConfigDict(env_file=".env", extra="ignore")
+
+    @model_validator(mode="after")
+    def validate_admin_token(self):
+        weak_tokens = {"", "change-me", "local-dev-only", "replace-with-a-long-local-secret"}
+        if self.app_env not in {"development", "test"} and self.admin_token in weak_tokens:
+            raise ValueError("ADMIN_TOKEN must be explicitly configured with a strong value outside development/test.")
+        if self.admin_token in weak_tokens and self.app_env in {"development", "test"}:
+            return self
+        if len(self.admin_token) < 16:
+            raise ValueError("ADMIN_TOKEN must contain at least 16 characters.")
+        return self
 
     @property
     def worker_configurations(self) -> list[tuple[str, str, float]]:

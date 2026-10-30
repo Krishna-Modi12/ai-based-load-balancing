@@ -24,6 +24,13 @@ class BackendNode(Base):
     updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow, onupdate=utcnow)
 
 
+class RoutingPolicy(Base):
+    __tablename__ = "routing_policy"
+    id: Mapped[int] = mapped_column(Integer, primary_key=True, default=1)
+    policy: Mapped[str] = mapped_column(String(30), default="round_robin")
+    updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow, onupdate=utcnow)
+
+
 class TelemetrySample(Base):
     __tablename__ = "telemetry_samples"
     id: Mapped[str] = mapped_column(String(36), primary_key=True, default=lambda: str(uuid.uuid4()))

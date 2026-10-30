@@ -38,6 +38,7 @@ services:
     environment:
       DATABASE_URL: postgresql+psycopg://loadbalancer:${POSTGRES_PASSWORD:-local-dev-only}@db:5432/loadbalancer
       ADMIN_TOKEN: ${ADMIN_TOKEN:?Set ADMIN_TOKEN in .env}
+      APP_ENV: ${APP_ENV:-production}
       WORKER_URLS: worker-a=http://worker-a:8080=2,worker-b=http://worker-b:8080=1,worker-c=http://worker-c:8080=1
       MODEL_DIR: /models
       TELEMETRY_STALE_SECONDS: "${TELEMETRY_STALE_SECONDS:-120}"

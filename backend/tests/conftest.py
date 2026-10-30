@@ -3,6 +3,7 @@ import pytest
 
 # Ensure testing settings are used consistently regardless of local .env
 os.environ["ADMIN_TOKEN"] = "change-me"
+os.environ["APP_ENV"] = "test"
 from app.config import get_settings
 get_settings.cache_clear()
 

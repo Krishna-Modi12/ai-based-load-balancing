@@ -248,8 +248,17 @@ async def execute_run(run_id: str, settings: Settings) -> None:
                         headers=headers,
                         json={"enabled": False},
                     )
-        await _warmup(config, headers, cancel_event)
-        samples = await _measurement_loop(config, headers, cancel_event, 0)
+        measurement_config = config
+        if config.scenario == "timeout":
+            measurement_config = config.model_copy(update={"request_timeout_seconds": min(config.request_timeout_seconds, 0.01)})
+        if config.scenario in {"missing_model", "stale_telemetry"}:
+            with SessionLocal() as notes_db:
+                notes_run = notes_db.get(ExperimentRun, run_id)
+                if notes_run:
+                    notes_run.notes = f"{notes_run.notes or ''}\nScenario requires external operator injection: {config.scenario}".strip()
+                    notes_db.commit()
+        await _warmup(measurement_config, headers, cancel_event)
+        samples = await _measurement_loop(measurement_config, headers, cancel_event, 0)
         with SessionLocal() as db:
             run = db.get(ExperimentRun, run_id)
             if not run:

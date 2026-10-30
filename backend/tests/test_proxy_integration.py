@@ -1,6 +1,7 @@
 from datetime import datetime, timedelta, timezone
 
 import httpx
+import pytest
 from fastapi.testclient import TestClient
 from sqlalchemy import select
 
@@ -9,6 +10,7 @@ from app.config import Settings
 from app.database import SessionLocal
 from app.ml import FEATURE_NAMES, load_active_predictor, train_model
 from app.models import BackendNode, RoutingDecision, TelemetrySample
+from app.models import ModelVersion
 from app.routing import Router
 from app.services import eligible_backends
 
@@ -136,3 +138,36 @@ def test_model_training_and_feature_schema_load(tmp_path):
     assert model.training_sample_count == 25
     assert predictor is not None
     assert predictor.predict([1.0] * len(FEATURE_NAMES)) >= 0
+
+
+@pytest.mark.parametrize("payload", [
+    {},
+    {"feature_names": ["wrong"], "schema": "v1", "model": object()},
+    {"feature_names": FEATURE_NAMES, "schema": "wrong", "model": object()},
+])
+def test_invalid_model_artifacts_fall_back_safely(tmp_path, payload):
+    import joblib
+
+    artifact = tmp_path / "invalid.joblib"
+    joblib.dump(payload, artifact)
+    with SessionLocal() as db:
+        db.add(ModelVersion(
+            version="invalid", algorithm_name="RandomForestRegressor",
+            artifact_uri=str(artifact), training_sample_count=20,
+            feature_schema_version="v1", validation_mae_ms=1, validation_rmse_ms=1,
+            is_active=True,
+        ))
+        db.commit()
+        assert load_active_predictor(db) is None
+
+
+def test_missing_model_artifact_falls_back_safely(tmp_path):
+    with SessionLocal() as db:
+        db.add(ModelVersion(
+            version="missing", algorithm_name="RandomForestRegressor",
+            artifact_uri=str(tmp_path / "missing.joblib"), training_sample_count=20,
+            feature_schema_version="v1", validation_mae_ms=1, validation_rmse_ms=1,
+            is_active=True,
+        ))
+        db.commit()
+        assert load_active_predictor(db) is None

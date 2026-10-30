@@ -19,8 +19,8 @@ PARTIAL and BLOCKED remain open.
 
 ## Production-quality backlog
 
-- **OPEN:** Implement runner-owned failure scenarios or rename them as operator-injected.
-- **OPEN:** Replace global policy state.
+- **PARTIAL:** Timeout injection is runner-owned; missing-model and stale-telemetry scenarios are explicitly operator-injected and recorded.
+- **PARTIAL:** Active policy is persisted in PostgreSQL/SQLite through `routing_policy`; multi-process concurrency testing remains.
 - **PARTIAL:** Most API contract routes and consistent error/request-ID envelopes are now implemented; timeseries aggregation and model activation require further hardening.
 - **PASS:** Experiment creation is protected.
 - Add rate limits, circuit breaker, scheduled health checks, request limits, graceful shutdown, and model freshness rules.
