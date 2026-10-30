@@ -20,14 +20,15 @@ from sqlalchemy.orm import Session
 
 from .config import get_settings
 from .database import SessionLocal, get_db
-from .ml import get_feature_importances, load_active_predictor, load_model_version, train_model
+from .ml import activate_algorithm, get_feature_importances, load_active_predictor, load_model_version, run_model_tournament, train_model
 from .experiments import CANCEL_EVENTS, run_experiment_in_thread
 from .models import BackendNode, ExperimentMetric, ExperimentRun, ModelVersion, RoutingDecision, RoutingPolicy, TelemetrySample
 from .routing import Router
 from .schemas import (
-    BackendCreate, BackendDetail, BackendOut, BackendPatch, DecisionOut, ExperimentConfig,
-    ExperimentDetail, ExperimentListItem, ExperimentOut, ExperimentMetricOut, ModelVersionOut,
-    PolicyOut, PolicyUpdate,
+    BackendCreate, BackendDetail, BackendOut, BackendPatch, CdfPoint, ChaosInjectRequest,
+    CircuitBreakerOut, DecisionOut, ExperimentConfig, ExperimentDetail, ExperimentListItem,
+    ExperimentOut, ExperimentMetricOut, ModelTournamentOut, ModelVersionOut, PolicyOut,
+    PolicyUpdate, StressTestRequest, StressTestResult,
 )
 from .services import collect_health, eligible_backends, feature_vector, latest_features
 
@@ -414,16 +415,30 @@ def train(db: Session = Depends(get_db)):
 
 
 @app.get("/api/v1/route")
-async def proxy_demo(request_class: str = Query("normal", pattern="^(light|normal|heavy)$"), db: Session = Depends(get_db)):
+async def proxy_demo(
+    request: Request,
+    request_class: str = Query("normal", pattern="^(light|normal|heavy)$"),
+    session_key: str | None = Query(None),
+    db: Session = Depends(get_db),
+):
     candidates = eligible_backends(db, settings)
     if not candidates: raise HTTPException(503, "NO_HEALTHY_BACKENDS")
-    features = {node.id: latest_features(db, node, request_class) for node in candidates}
+
+    # Resilience: filter through circuit breakers (outlier ejection)
+    healthy_candidates, _ = router.circuit_breaker.filter_healthy(candidates)
+    active_candidates = healthy_candidates if healthy_candidates else candidates
+
+    features = {node.id: latest_features(db, node, request_class) for node in active_candidates}
     selection_start = time.perf_counter()
     policy = _current_policy(db)
-    if policy == "round_robin": route = router.select_round_robin(candidates)
-    elif policy == "weighted_round_robin": route = router.select_weighted_round_robin(candidates)
-    elif policy == "least_connections": route = router.select_least_connections(candidates)
-    else: route = router.select_ai(candidates, {key: feature_vector(value) for key, value in features.items()}, load_active_predictor(db))
+    req_key = session_key or (request and request.headers.get("X-Session-ID")) or (request and getattr(request.state, "request_id", None)) or str(uuid.uuid4())
+
+    if policy == "round_robin": route = router.select_round_robin(active_candidates)
+    elif policy == "weighted_round_robin": route = router.select_weighted_round_robin(active_candidates)
+    elif policy == "least_connections": route = router.select_least_connections(active_candidates)
+    elif policy == "consistent_hash": route = router.select_consistent_hash(active_candidates, key=req_key)
+    else: route = router.select_ai(active_candidates, {key: feature_vector(value) for key, value in features.items()}, load_active_predictor(db))
+
     ai_inference_latency = (time.perf_counter() - selection_start) * 1000 if policy == "ai_latency" else None
     request_id, start = str(uuid.uuid4()), time.perf_counter()
     router.inflight[route.backend.id] = router.inflight.get(route.backend.id, 0) + 1
@@ -437,7 +452,16 @@ async def proxy_demo(request_class: str = Query("normal", pattern="^(light|norma
     finally:
         router.inflight[route.backend.id] -= 1
     elapsed = (time.perf_counter() - start) * 1000
-    decision = RoutingDecision(request_id=request_id, policy=route.policy, selected_backend_id=route.backend.id, model_version_id=route.model_version_id, predicted_latency_ms=route.predicted_latency_ms, actual_latency_ms=elapsed, ai_inference_latency_ms=ai_inference_latency, status_code=status, success=failure is None, request_class=request_class, fallback_reason=route.fallback_reason, failure_type=failure, features_json=features[route.backend.id])
+
+    # Record circuit breaker telemetry
+    if failure:
+        router.circuit_breaker.record_failure(route.backend.id, is_slow=False, latency_ms=elapsed)
+    else:
+        router.circuit_breaker.record_success(route.backend.id, elapsed)
+        if elapsed > router.circuit_breaker.slow_latency_threshold_ms:
+            router.circuit_breaker.record_failure(route.backend.id, is_slow=True, latency_ms=elapsed)
+
+    decision = RoutingDecision(request_id=request_id, policy=route.policy, selected_backend_id=route.backend.id, model_version_id=route.model_version_id, predicted_latency_ms=route.predicted_latency_ms, actual_latency_ms=elapsed, ai_inference_latency_ms=ai_inference_latency, status_code=status, success=failure is None, request_class=request_class, fallback_reason=route.fallback_reason, failure_type=failure, features_json=features.get(route.backend.id))
     db.add(decision); db.commit()
     if failure:
         raise HTTPException(502, "UPSTREAM_REQUEST_FAILED")
@@ -445,8 +469,8 @@ async def proxy_demo(request_class: str = Query("normal", pattern="^(light|norma
 
 
 @app.get("/api/v1/demo/request")
-async def demo_request(workload: str = Query("normal", pattern="^(light|normal|heavy)$"), db: Session = Depends(get_db)):
-    return await proxy_demo(workload, db)
+async def demo_request(request: Request, workload: str = Query("normal", pattern="^(light|normal|heavy)$"), db: Session = Depends(get_db)):
+    return await proxy_demo(request=request, request_class=workload, session_key=None, db=db)
 
 
 def _percentile(values: list[float], percentile: float) -> float | None:
@@ -498,7 +522,7 @@ async def benchmark_shootout(
     if not candidates:
         raise HTTPException(503, "NO_HEALTHY_BACKENDS")
 
-    policies = ["round_robin", "weighted_round_robin", "least_connections", "ai_latency"]
+    policies = ["round_robin", "weighted_round_robin", "least_connections", "consistent_hash", "ai_latency"]
     predictor = load_active_predictor(db)
     results = {}
 
@@ -507,13 +531,15 @@ async def benchmark_shootout(
         worker_counts: dict[str, int] = {b.name: 0 for b in candidates}
         features = {node.id: latest_features(db, node, request_class) for node in candidates}
 
-        for _ in range(rounds):
+        for idx_round in range(rounds):
             if pol == "round_robin":
                 route = router.select_round_robin(candidates)
             elif pol == "weighted_round_robin":
                 route = router.select_weighted_round_robin(candidates)
             elif pol == "least_connections":
                 route = router.select_least_connections(candidates)
+            elif pol == "consistent_hash":
+                route = router.select_consistent_hash(candidates, key=f"shootout-session-{idx_round % 4}")
             else:
                 route = router.select_ai(
                     candidates,
@@ -568,3 +594,136 @@ async def benchmark_shootout(
         "ai_p95_speedup_percent": max(0.0, speedup),
         "policies": results,
     }
+
+
+@app.get("/api/v1/system/circuit-breakers", response_model=list[CircuitBreakerOut])
+def get_circuit_breakers(db: Session = Depends(get_db)):
+    nodes = {node.id: node.name for node in db.scalars(select(BackendNode)).all()}
+    statuses = router.circuit_breaker.get_all_statuses()
+    result = []
+    for backend_id, name in nodes.items():
+        st = statuses.get(backend_id) or router.circuit_breaker.get_status(backend_id)
+        result.append(CircuitBreakerOut(
+            backend_id=backend_id,
+            name=name,
+            state=st["state"],
+            consecutive_failures=st["consecutive_failures"],
+            total_ejections=st["total_ejections"],
+            remaining_cooldown_seconds=st["remaining_cooldown_seconds"],
+            latency_ewma_ms=st["latency_ewma_ms"],
+            is_available=st["is_available"],
+        ))
+    return result
+
+
+@app.post("/api/v1/system/chaos/inject", dependencies=[Depends(require_admin)])
+def inject_chaos(payload: ChaosInjectRequest, db: Session = Depends(get_db)):
+    node = db.get(BackendNode, payload.backend_id)
+    if not node:
+        raise HTTPException(404, "Backend not found")
+    status = router.circuit_breaker.inject_fault(payload.backend_id, payload.action)
+    return {"status": "ok", "backend": node.name, "circuit_breaker": status}
+
+
+@app.get("/api/v1/models/tournament", response_model=ModelTournamentOut)
+def get_model_tournament(db: Session = Depends(get_db)):
+    return run_model_tournament(db, settings)
+
+
+@app.post("/api/v1/models/tournament/activate", dependencies=[Depends(require_admin)])
+def activate_tournament_model(algorithm_name: str = Query(...), db: Session = Depends(get_db)):
+    model = activate_algorithm(db, algorithm_name)
+    if not model:
+        run_model_tournament(db, settings)
+        model = activate_algorithm(db, algorithm_name)
+    if not model:
+        raise HTTPException(404, f"Could not activate algorithm: {algorithm_name}")
+    return {"status": "activated", "version": model.version, "algorithm_name": model.algorithm_name}
+
+
+@app.post("/api/v1/benchmark/stress", response_model=StressTestResult)
+async def benchmark_stress_test(
+    payload: StressTestRequest,
+    db: Session = Depends(get_db),
+):
+    candidates = eligible_backends(db, settings)
+    if not candidates:
+        raise HTTPException(503, "NO_HEALTHY_BACKENDS")
+
+    predictor = load_active_predictor(db)
+    latencies: list[float] = []
+    worker_distribution: dict[str, int] = {b.name: 0 for b in candidates}
+    success_count = 0
+    error_count = 0
+
+    features = {node.id: latest_features(db, node, payload.request_class) for node in candidates}
+
+    for i in range(payload.rounds):
+        if payload.policy == "round_robin":
+            route = router.select_round_robin(candidates)
+        elif payload.policy == "weighted_round_robin":
+            route = router.select_weighted_round_robin(candidates)
+        elif payload.policy == "least_connections":
+            route = router.select_least_connections(candidates)
+        elif payload.policy == "consistent_hash":
+            route = router.select_consistent_hash(candidates, key=f"stress-session-{i % 7}")
+        else:
+            route = router.select_ai(
+                candidates,
+                {k: feature_vector(v) for k, v in features.items()},
+                predictor,
+            )
+
+        worker_distribution[route.backend.name] = worker_distribution.get(route.backend.name, 0) + 1
+        t_start = time.perf_counter()
+        req_id = str(uuid.uuid4())
+        try:
+            async with httpx.AsyncClient(timeout=settings.proxy_timeout_seconds, follow_redirects=False) as client:
+                resp = await client.get(
+                    f"{route.backend.base_url}/demo",
+                    params={"request_class": payload.request_class},
+                    headers={"X-Request-ID": req_id},
+                )
+            resp.raise_for_status()
+            elapsed = (time.perf_counter() - t_start) * 1000
+            latencies.append(round(elapsed, 2))
+            success_count += 1
+        except Exception:
+            error_count += 1
+            latencies.append(100.0)
+
+    latencies.sort()
+    mean_lat = round(sum(latencies) / len(latencies), 2) if latencies else 0.0
+    p50 = round(_percentile(latencies, 0.50) or 0.0, 2)
+    p90 = round(_percentile(latencies, 0.90) or 0.0, 2)
+    p95 = round(_percentile(latencies, 0.95) or 0.0, 2)
+    p99 = round(_percentile(latencies, 0.99) or 0.0, 2)
+
+    cdf_points: list[CdfPoint] = []
+    cdf_percentiles = [
+        0.05, 0.10, 0.15, 0.20, 0.25, 0.30, 0.35, 0.40, 0.45, 0.50,
+        0.55, 0.60, 0.65, 0.70, 0.75, 0.80, 0.85, 0.90, 0.95, 0.99, 1.00
+    ]
+    for p in cdf_percentiles:
+        val = _percentile(latencies, p) or 0.0
+        cdf_points.append(CdfPoint(percentile=round(p * 100, 1), latency_ms=round(val, 2)))
+
+    slow_worker_hits = worker_distribution.get("worker-b", 0)
+    avoidance = round((payload.rounds - slow_worker_hits) / payload.rounds * 100, 1) if payload.rounds else 100.0
+
+    return StressTestResult(
+        policy=payload.policy,
+        rounds=payload.rounds,
+        request_class=payload.request_class,
+        success_count=success_count,
+        error_count=error_count,
+        mean_latency_ms=mean_lat,
+        p50_latency_ms=p50,
+        p90_latency_ms=p90,
+        p95_latency_ms=p95,
+        p99_latency_ms=p99,
+        cdf=cdf_points,
+        worker_distribution=worker_distribution,
+        slow_worker_avoidance_rate=avoidance,
+    )
+

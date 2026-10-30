@@ -15,7 +15,7 @@ class BackendPatch(BaseModel):
 
 
 class PolicyUpdate(BaseModel):
-    policy: str = Field(pattern="^(round_robin|weighted_round_robin|least_connections|ai_latency)$")
+    policy: str = Field(pattern="^(round_robin|weighted_round_robin|least_connections|ai_latency|consistent_hash)$")
 
 
 class BackendOut(BaseModel):
@@ -63,13 +63,13 @@ class ModelVersionOut(BaseModel):
 
 
 WORKLOAD_PROFILES = ("uniform", "heterogeneous", "bursty", "mixed")
-EXPERIMENT_POLICIES = ("round_robin", "weighted_round_robin", "least_connections", "ai_latency")
+EXPERIMENT_POLICIES = ("round_robin", "weighted_round_robin", "least_connections", "ai_latency", "consistent_hash")
 FAILURE_SCENARIOS = ("none", "node_failure", "stale_telemetry", "missing_model", "timeout")
 
 
 class ExperimentConfig(BaseModel):
     name: str = Field(min_length=1, max_length=200)
-    policy: Literal["round_robin", "weighted_round_robin", "least_connections", "ai_latency"]
+    policy: Literal["round_robin", "weighted_round_robin", "least_connections", "ai_latency", "consistent_hash"]
     workload_profile: Literal["uniform", "heterogeneous", "bursty", "mixed"]
     repetition: int = Field(default=1, ge=1, le=100)
     scenario: Literal["none", "node_failure", "stale_telemetry", "missing_model", "timeout"] = "none"
@@ -132,3 +132,68 @@ class ExperimentDetail(ExperimentOut):
 
 class ExperimentListItem(ExperimentOut):
     metric: ExperimentMetricOut | None = None
+
+
+class CircuitBreakerOut(BaseModel):
+    backend_id: str
+    name: str | None = None
+    state: str
+    consecutive_failures: int
+    total_ejections: int
+    remaining_cooldown_seconds: float
+    latency_ewma_ms: float
+    is_available: bool
+
+
+class ChaosInjectRequest(BaseModel):
+    backend_id: str
+    action: Literal["trip", "reset"]
+
+
+class ModelTournamentCandidate(BaseModel):
+    model_type: str
+    algorithm_name: str
+    validation_mae_ms: float
+    validation_rmse_ms: float
+    r2_score: float
+    train_time_ms: float
+    inference_p95_ms: float
+    training_samples: int
+    is_active: bool
+    rank: int
+    description: str
+
+
+class ModelTournamentOut(BaseModel):
+    evaluated_samples: int
+    best_algorithm: str
+    models: list[ModelTournamentCandidate]
+    timestamp: datetime
+
+
+class StressTestRequest(BaseModel):
+    rounds: int = Field(default=20, ge=5, le=100)
+    request_class: str = Field(default="normal", pattern="^(light|normal|heavy)$")
+    policy: str = Field(default="ai_latency", pattern="^(round_robin|weighted_round_robin|least_connections|ai_latency|consistent_hash)$")
+
+
+class CdfPoint(BaseModel):
+    percentile: float
+    latency_ms: float
+
+
+class StressTestResult(BaseModel):
+    policy: str
+    rounds: int
+    request_class: str
+    success_count: int
+    error_count: int
+    mean_latency_ms: float
+    p50_latency_ms: float
+    p90_latency_ms: float
+    p95_latency_ms: float
+    p99_latency_ms: float
+    cdf: list[CdfPoint]
+    worker_distribution: dict[str, int]
+    slow_worker_avoidance_rate: float
+
