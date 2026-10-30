@@ -2,20 +2,20 @@
 
 ## Overall assessment
 
-**Functional prototype with substantial implementation depth; not fully compliant as a production-ready release candidate.**
+**Functional prototype with substantial implementation depth; Phase 11 materially improved runtime and API closure, but it is not fully compliant as a production-ready release candidate.**
 
 | Area | Assessment |
 |---|---:|
-| Backend core and proxy | 90% |
+| Backend core and proxy | 93% |
 | Conventional routing | 95% |
 | ML routing and fallback | 82% |
-| Database and migrations | 80% |
+| Database and migrations | 86% |
 | Experiments and research evidence | 82% |
 | Reliability/failure handling | 75% |
-| Frontend | 62% |
-| Documentation | 78% |
-| Release/reproducibility | 68% |
-| Overall submission readiness | 78% |
+| Frontend | 75% |
+| Documentation | 84% |
+| Release/reproducibility | 76% |
+| Overall submission readiness | 82% |
 
 These percentages are reasoned audit estimates, not test scores.
 
@@ -25,7 +25,11 @@ The project has a real Layer-7 proxy, registered-backend routing, conventional b
 
 ## Blocking or high-priority issues
 
-The current PostgreSQL volume prevented independent API startup verification. The frontend lacks the operational controls implied by older documentation. Failure-scenario automation is incomplete. Global policy state can corrupt concurrent experiment semantics. API contract routes and error envelopes are inconsistent. Browser and visual document validation remain unavailable.
+The PostgreSQL API startup, health checks, migrations, routing, record creation, and persistence across API restart were independently verified without deleting the existing volume. The frontend now has basic policy, demo, health, backend, model, and experiment controls, but browser validation remains unavailable. Failure-scenario automation is incomplete, global policy state can corrupt concurrent experiment semantics, the default development token remains weak, and manual Word/PPT inspection remains blocked.
+
+## Phase 11 closure
+
+Of 12 tracked findings, 2 are PASS (API contract and release consistency), 4 are PARTIAL (PostgreSQL clean-volume reproducibility, frontend/browser coverage, token policy, and model-load testing), 1 is BLOCKED by unavailable browser/office tooling, and the remaining reliability, global-state, failure-injection, and documentation reconciliation items remain OPEN or PARTIAL. No benchmark records, tags, or existing database volume were deleted.
 
 ## Final recommendation
 

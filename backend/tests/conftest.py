@@ -1,4 +1,10 @@
+import os
 import pytest
+
+# Ensure testing settings are used consistently regardless of local .env
+os.environ["ADMIN_TOKEN"] = "change-me"
+from app.config import get_settings
+get_settings.cache_clear()
 
 from app.database import Base, engine
 

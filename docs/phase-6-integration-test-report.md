@@ -122,3 +122,8 @@ Then call `POST /api/v1/backends/health-check-all` with the token, send controll
 ## Exact next step
 
 Start Docker Desktop until `docker info` shows a **Server** section, then rerun the Compose commands above. Only after the Phase 6 container checks pass should Phase 7 run matched, repeated Locust workloads for Round Robin, Least Connections, and valid AI inference; retain the raw outputs before calculating or reporting any performance metric.
+# Historical report
+
+This report records the Phase 6 state at the time of that validation. Later
+Phase 7 implementation added experiment lifecycle and export endpoints; use
+the current API contract and final audit for the current route inventory.

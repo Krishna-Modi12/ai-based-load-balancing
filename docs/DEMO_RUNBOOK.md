@@ -6,6 +6,10 @@
 * PowerShell is open in the repository root.
 * `.env` exists and contains local values for `ADMIN_TOKEN` and
   `POSTGRES_PASSWORD`. Never share these values.
+* PostgreSQL reads `POSTGRES_PASSWORD` only when the named volume is first
+  initialized. If an existing volume reports password authentication failure,
+  inspect the original local `.env` value or use the disposable reset below;
+  changing `.env` alone cannot rotate an initialized cluster password.
 
 ## 1. Start and check the stack
 
@@ -104,6 +108,17 @@ npm --prefix .\frontend run build
 * API unavailable: `docker compose -f deployment\docker-compose.yml logs api`.
 * Database not ready: wait for `deployment-db-1` to become healthy; do not
   remove the named volume.
+* Disposable clean database (destroys only this Compose project's local
+  database records; do not use when preserving benchmark evidence):
+
+```powershell
+docker compose -f deployment\docker-compose.yml down
+docker volume rm deployment_postgres_data
+docker compose -f deployment\docker-compose.yml up --build -d
+```
+
+  Confirm the volume name with `docker volume ls` before removal. For normal
+  cleanup, never use `down -v`.
 * Workers not eligible: run the health-check-all command above.
 * Frontend cannot reach API: verify `deployment-frontend-1` and
   `http://localhost:5173`.

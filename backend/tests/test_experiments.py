@@ -40,7 +40,7 @@ def test_experiment_create_list_and_raw_exports():
         "seed": 7,
     }
     with TestClient(app) as client:
-        created = client.post("/api/v1/experiments", json=payload)
+        created = client.post("/api/v1/experiments", json=payload, headers={"X-Admin-Token": "change-me"})
         assert created.status_code == 201
         experiment_id = created.json()["id"]
         listed = client.get("/api/v1/experiments")
@@ -63,5 +63,5 @@ def test_experiment_validation_rejects_unbounded_configuration():
             "policy": "round_robin",
             "workload_profile": "uniform",
             "duration_seconds": 100000,
-        })
+        }, headers={"X-Admin-Token": "change-me"})
     assert response.status_code == 422

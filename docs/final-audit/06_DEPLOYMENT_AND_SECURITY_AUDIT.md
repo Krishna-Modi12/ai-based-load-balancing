@@ -2,7 +2,7 @@
 
 ## Deployment evidence
 
-Compose syntax passed and Docker Engine was available. Workers, database, and frontend images were buildable. The API smoke start was blocked by an initialized PostgreSQL volume retaining a different `loadbalancer` password. Changing `POSTGRES_PASSWORD` does not change an existing cluster password.
+Compose syntax passed and Docker Engine was available. Workers, database, and frontend images were buildable. The initial audit API smoke start was blocked by an initialized PostgreSQL volume retaining a different `loadbalancer` password. Phase 11 used the existing local credentials and verified readiness, migrations, live routing, record creation, and retrieval after API restart without deleting the volume. Changing `POSTGRES_PASSWORD` does not change an existing cluster password.
 
 The documented setup needs an explicit disposable clean-volume path and a warning that volume deletion destroys local database data. A clean-volume CI smoke test would make this reproducible.
 
@@ -22,7 +22,7 @@ The documented setup needs an explicit disposable clean-volume path and a warnin
 | Priority | Finding | Remediation |
 |---|---|---|
 | High | Default direct-run token is `change-me` | Refuse insecure defaults outside explicit development mode |
-| High | Experiment creation is unauthenticated | Apply admin dependency |
+| High | Experiment creation was unauthenticated | **Remediated:** admin dependency added and regression tests pass |
 | Medium | No rate limiting or resource limits | Bound training, experiments, request size, and concurrency |
 | Medium | No circuit breaker or periodic health scheduler | Add quarantine and scheduled checks |
 | Medium | Global policy state is not multi-process safe | Persist or centralize policy |

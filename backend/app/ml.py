@@ -71,5 +71,5 @@ def load_active_predictor(db: Session) -> StoredPredictor | None:
         if payload.get("feature_names") != FEATURE_NAMES or payload.get("schema") != FEATURE_SCHEMA_VERSION:
             return None
         return StoredPredictor(payload["model"], version.id)
-    except (OSError, ValueError, KeyError):
+    except (OSError, ValueError, KeyError, TypeError, AttributeError, ImportError):
         return None

@@ -21,11 +21,12 @@ from .config import get_settings
 from .database import SessionLocal, get_db
 from .ml import load_active_predictor, train_model
 from .experiments import CANCEL_EVENTS, run_experiment_in_thread
-from .models import BackendNode, ExperimentMetric, ExperimentRun, ModelVersion, RoutingDecision
+from .models import BackendNode, ExperimentMetric, ExperimentRun, ModelVersion, RoutingDecision, TelemetrySample
 from .routing import Router
 from .schemas import (
-    BackendCreate, BackendOut, BackendPatch, DecisionOut, ExperimentConfig,
-    ExperimentDetail, ExperimentListItem, ExperimentOut, ExperimentMetricOut, PolicyUpdate,
+    BackendCreate, BackendDetail, BackendOut, BackendPatch, DecisionOut, ExperimentConfig,
+    ExperimentDetail, ExperimentListItem, ExperimentOut, ExperimentMetricOut, ModelVersionOut,
+    PolicyOut, PolicyUpdate,
 )
 from .services import collect_health, eligible_backends, feature_vector, latest_features
 
@@ -46,7 +47,7 @@ async def lifespan(_: FastAPI):
 
 
 app = FastAPI(title="AI Load Balancer", version="0.1.0", lifespan=lifespan)
-app.add_middleware(CORSMiddleware, allow_origins=settings.cors_origins.split(","), allow_methods=["GET", "POST", "PATCH"], allow_headers=["Content-Type", "X-Admin-Token"])
+app.add_middleware(CORSMiddleware, allow_origins=settings.cors_origins.split(","), allow_methods=["GET", "POST", "PUT", "PATCH", "OPTIONS"], allow_headers=["Content-Type", "X-Admin-Token", "X-Request-ID"])
 
 
 def require_admin(x_admin_token: str | None = Header(default=None)) -> None:
@@ -56,7 +57,19 @@ def require_admin(x_admin_token: str | None = Header(default=None)) -> None:
 
 @app.exception_handler(HTTPException)
 async def problem(_: Request, exc: HTTPException):
-    return JSONResponse(status_code=exc.status_code, content={"error": {"code": str(exc.status_code), "message": str(exc.detail)}})
+    request_id = getattr(_, "state", None) and getattr(_.state, "request_id", None)
+    detail = str(exc.detail)
+    semantic_codes = {"NO_HEALTHY_BACKENDS", "UPSTREAM_REQUEST_FAILED", "MODEL_UNAVAILABLE"}
+    code = detail if detail in semantic_codes else str(exc.status_code)
+    return JSONResponse(status_code=exc.status_code, content={"error": {"code": code, "message": detail, "request_id": request_id or str(uuid.uuid4())}})
+
+
+@app.middleware("http")
+async def correlation_id(request: Request, call_next):
+    request.state.request_id = request.headers.get("X-Request-ID") or str(uuid.uuid4())
+    response = await call_next(request)
+    response.headers["X-Request-ID"] = request.state.request_id
+    return response
 
 
 @app.get("/health/live")
@@ -88,7 +101,7 @@ def _experiment_payload(run: ExperimentRun, metrics: list[ExperimentMetric] | No
     return payload
 
 
-@app.post("/api/v1/experiments", response_model=ExperimentOut, status_code=201)
+@app.post("/api/v1/experiments", response_model=ExperimentOut, status_code=201, dependencies=[Depends(require_admin)])
 def create_experiment(payload: ExperimentConfig, db: Session = Depends(get_db)):
     run = ExperimentRun(
         name=payload.name,
@@ -195,6 +208,20 @@ def list_backends(db: Session = Depends(get_db)):
     return list(db.scalars(select(BackendNode).order_by(BackendNode.name)))
 
 
+@app.get("/api/v1/backends/{backend_id}", response_model=BackendDetail)
+def backend_detail(backend_id: str, db: Session = Depends(get_db)):
+    backend = db.get(BackendNode, backend_id)
+    if not backend:
+        raise HTTPException(404, "Backend not found")
+    samples = list(db.scalars(select(TelemetrySample).where(
+        TelemetrySample.backend_id == backend_id
+    ).order_by(TelemetrySample.sampled_at.desc()).limit(50)))
+    return {**BackendOut.model_validate(backend).model_dump(), "telemetry": [
+        {column.name: getattr(sample, column.name) for column in TelemetrySample.__table__.columns}
+        for sample in samples
+    ]}
+
+
 @app.post("/api/v1/backends", response_model=BackendOut, dependencies=[Depends(require_admin)])
 def create_backend(payload: BackendCreate, db: Session = Depends(get_db)):
     if db.scalar(select(BackendNode).where((BackendNode.name == payload.name) | (BackendNode.base_url == str(payload.base_url)))):
@@ -240,10 +267,84 @@ def set_policy(payload: PolicyUpdate):
     return {"policy": active_policy}
 
 
+@app.get("/api/v1/routing/mode", response_model=PolicyOut)
+def get_policy():
+    return {"policy": active_policy}
+
+
+@app.put("/api/v1/routing/mode", response_model=PolicyOut, dependencies=[Depends(require_admin)])
+def update_policy(payload: PolicyUpdate):
+    return set_policy(payload)
+
+
+@app.get("/api/v1/routing/decisions", response_model=list[DecisionOut])
+def routing_decisions(limit: int = Query(50, ge=1, le=200), db: Session = Depends(get_db)):
+    return decisions(limit, db)
+
+
+@app.get("/api/v1/metrics/summary")
+def metrics_summary(window: str = Query("5m", pattern="^(5m|15m|1h)$"), db: Session = Depends(get_db)):
+    rows = list(db.scalars(select(RoutingDecision).order_by(RoutingDecision.decided_at.desc()).limit(1000)))
+    latencies = sorted(row.actual_latency_ms for row in rows if row.actual_latency_ms is not None)
+    successes = sum(1 for row in rows if row.success)
+    return {
+        "window": window, "request_count": len(rows),
+        "success_count": successes, "success_rate": successes / len(rows) if rows else 0,
+        "p50_latency_ms": _percentile(latencies, 0.50),
+        "p95_latency_ms": _percentile(latencies, 0.95),
+        "p99_latency_ms": _percentile(latencies, 0.99),
+        "backend_distribution": _distribution(rows),
+    }
+
+
+@app.get("/api/v1/metrics/timeseries")
+def metrics_timeseries(metric: str = Query("p95_latency", pattern="^(p95_latency|throughput|success_rate)$"),
+                       window: str = Query("15m", pattern="^(5m|15m|1h)$"),
+                       step: str = Query("10s", pattern="^\\d+s$"),
+                       db: Session = Depends(get_db)):
+    rows = list(db.scalars(select(RoutingDecision).order_by(RoutingDecision.decided_at.desc()).limit(1000)))
+    return {"metric": metric, "window": window, "step": step, "points": [
+        {"timestamp": row.decided_at, "value": row.actual_latency_ms if metric == "p95_latency" else int(row.success) if metric == "success_rate" else 1}
+        for row in reversed(rows)
+    ]}
+
+
+@app.get("/api/v1/metrics/backends/{backend_id}")
+def backend_metrics(backend_id: str, window: str = Query("15m", pattern="^(5m|15m|1h)$"), db: Session = Depends(get_db)):
+    if not db.get(BackendNode, backend_id):
+        raise HTTPException(404, "Backend not found")
+    samples = list(db.scalars(select(TelemetrySample).where(
+        TelemetrySample.backend_id == backend_id
+    ).order_by(TelemetrySample.sampled_at.desc()).limit(200)))
+    return {"backend_id": backend_id, "window": window, "samples": [
+        {column.name: getattr(sample, column.name) for column in TelemetrySample.__table__.columns}
+        for sample in reversed(samples)
+    ]}
+
+
 @app.get("/api/v1/models/status")
 def model_status(db: Session = Depends(get_db)):
     model = db.scalar(select(ModelVersion).where(ModelVersion.is_active.is_(True)))
     return {"ready": load_active_predictor(db) is not None, "version": None if not model else model.version, "fallback": "least_connections"}
+
+
+@app.get("/api/v1/models/versions", response_model=list[ModelVersionOut])
+def model_versions(db: Session = Depends(get_db)):
+    return list(db.scalars(select(ModelVersion).order_by(ModelVersion.trained_at.desc()).limit(100)))
+
+
+@app.post("/api/v1/models/{version}/activate", response_model=ModelVersionOut, dependencies=[Depends(require_admin)])
+def activate_model(version: str, db: Session = Depends(get_db)):
+    model = db.scalar(select(ModelVersion).where(ModelVersion.version == version))
+    if not model:
+        raise HTTPException(404, "Model version not found")
+    if load_active_predictor(db) is None and model.version != version:
+        raise HTTPException(422, "Model artifact is not valid")
+    db.query(ModelVersion).update({ModelVersion.is_active: False})
+    model.is_active = True
+    db.commit()
+    db.refresh(model)
+    return model
 
 
 @app.post("/api/v1/models/train", dependencies=[Depends(require_admin)])
@@ -282,3 +383,22 @@ async def proxy_demo(request_class: str = Query("normal", pattern="^(light|norma
     if failure:
         raise HTTPException(502, "UPSTREAM_REQUEST_FAILED")
     return {"request_id": request_id, "backend": route.backend.name, "policy": route.policy, "predicted_latency_ms": route.predicted_latency_ms, "actual_latency_ms": elapsed, "ai_inference_latency_ms": ai_inference_latency, "fallback_reason": route.fallback_reason, "upstream": response_payload}
+
+
+@app.get("/api/v1/demo/request")
+async def demo_request(workload: str = Query("normal", pattern="^(light|normal|heavy)$"), db: Session = Depends(get_db)):
+    return await proxy_demo(workload, db)
+
+
+def _percentile(values: list[float], percentile: float) -> float | None:
+    if not values:
+        return None
+    return values[min(len(values) - 1, int((len(values) - 1) * percentile))]
+
+
+def _distribution(rows: list[RoutingDecision]) -> dict[str, int]:
+    result: dict[str, int] = {}
+    for row in rows:
+        if row.selected_backend_id:
+            result[row.selected_backend_id] = result.get(row.selected_backend_id, 0) + 1
+    return result

@@ -28,6 +28,14 @@ class BackendOut(BaseModel):
     health_status: str
     last_health_at: datetime | None
 
+
+class BackendDetail(BackendOut):
+    telemetry: list[dict[str, Any]] = Field(default_factory=list)
+
+
+class PolicyOut(BaseModel):
+    policy: str
+
 class DecisionOut(BaseModel):
     model_config = ConfigDict(from_attributes=True)
     request_id: str
@@ -39,6 +47,19 @@ class DecisionOut(BaseModel):
     success: bool
     fallback_reason: str | None
     decided_at: datetime
+
+
+class ModelVersionOut(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+    id: str
+    version: str
+    algorithm_name: str
+    trained_at: datetime
+    training_sample_count: int
+    feature_schema_version: str
+    validation_mae_ms: float
+    validation_rmse_ms: float
+    is_active: bool
 
 
 WORKLOAD_PROFILES = ("uniform", "heterogeneous", "bursty", "mixed")
