@@ -257,3 +257,4 @@ npm run dev
 
 **Q4: How does the system handle an AI model failure or network partitioning?**  
 *Answer:* The routing engine implements an automatic fallback circuit breaker. If the model artifact cannot be found, if inference times out, if predictions contain non-finite numbers (NaN/Inf), or if backend telemetry becomes stale, the system automatically falls back to Least Connections routing and logs the exact fallback reason in the PostgreSQL audit trail.
+
