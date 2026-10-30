@@ -78,6 +78,8 @@ ai-based-load-balancing/
 - [Presentation](docs/AI_Based_Load_Balancing_Presentation.pptx)
 - [Demonstration runbook](docs/DEMO_RUNBOOK.md)
 - [Viva questions and answers](docs/VIVA_QUESTIONS_AND_ANSWERS.md)
+- [Final comprehensive audit](docs/final-audit/FINAL_PROJECT_AUDIT_REPORT.md)
+- [Audit summary](docs/final-audit/00_EXECUTIVE_AUDIT_SUMMARY.md)
 - [Research notes and sources](docs/12-research-and-sources.md)
 - [Demo/viva script](docs/13-demo-script.md)
 - [Project proposal report (DOCX)](AI_Based_Load_Balancing_Project_Proposal.docx)
