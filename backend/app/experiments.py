@@ -216,6 +216,9 @@ async def execute_run(run_id: str, settings: Settings) -> None:
         run = db.get(ExperimentRun, run_id)
         if not run:
             return
+        if run.status == "cancelled":
+            CANCEL_EVENTS.pop(run_id, None)
+            return
         config = ExperimentConfig.model_validate(run.configuration_json)
         run.status = "running"
         run.started_at = datetime.now(timezone.utc)

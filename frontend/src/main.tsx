@@ -49,18 +49,6 @@ type Experiment = {
 };
 
 const api = import.meta.env.VITE_API_BASE_URL || "";
-const configuredAdminToken = import.meta.env.VITE_ADMIN_TOKEN || "";
-const TOKEN_STORAGE_KEY = "lb_admin_token";
-
-function getInitialToken(): string {
-  try {
-    const saved = sessionStorage.getItem(TOKEN_STORAGE_KEY);
-    if (saved) return saved;
-  } catch {
-    // sessionStorage not accessible
-  }
-  return configuredAdminToken;
-}
 
 const getHeaders = (adminToken: string): Record<string, string> =>
   adminToken
@@ -103,18 +91,9 @@ function App() {
   const [initialLoading, setInitialLoading] = useState(true);
   const [isRefreshing, setIsRefreshing] = useState(false);
   const [notice, setNotice] = useState("");
-  const [adminToken, setAdminToken] = useState(getInitialToken);
+  const [adminToken, setAdminToken] = useState("");
 
   const isInitialMount = useRef(true);
-
-  const handleTokenChange = (val: string) => {
-    setAdminToken(val);
-    try {
-      sessionStorage.setItem(TOKEN_STORAGE_KEY, val);
-    } catch {
-      // sessionStorage not accessible
-    }
-  };
 
   const refresh = async (silent = false) => {
     if (!silent) setIsRefreshing(true);
@@ -243,7 +222,7 @@ function App() {
               id="admin-token-input"
               type="password"
               value={adminToken}
-              onChange={(e) => handleTokenChange(e.target.value)}
+              onChange={(e) => setAdminToken(e.target.value)}
               placeholder="Required for admin actions"
             />
           </label>

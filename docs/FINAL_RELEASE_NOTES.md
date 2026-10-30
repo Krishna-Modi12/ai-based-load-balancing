@@ -2,9 +2,9 @@
 
 ## Current candidate
 
-- Release candidate: `v1.0.6`
-- Source hardening commits: `1170dd1`, `3f49f6f`, `2dc6361`
-- Current archive: `AI_Based_Load_Balancing_v1.0.6.zip`
+- Release candidate: `v1.0.7`
+- Source hardening includes the full-system audit fixes after `308a41e`.
+- Current archive: `AI_Based_Load_Balancing_v1.0.7.zip`
 - Historical benchmark matrix: 36 valid runs, preserved unchanged
 
 ## Closure edits after v1.0.2
@@ -25,6 +25,18 @@ accessible labels and status attributes, stable initial loading behavior,
 non-flickering background refresh, safer error extraction, session-scoped
 operator-token handling in memory only, and an HTML document shell. These changes are
 included in `AI_Based_Load_Balancing_v1.0.6.zip`.
+
+## Full-system audit fixes after v1.0.6
+
+- Removed the unused build-time admin-token path from the frontend.
+- Bound Compose API/frontend ports to localhost by default.
+- Synchronized the frontend lockfile and changed the container build to reproducible `npm ci`.
+- Fixed root-level Alembic migration imports.
+- Applied backend telemetry time-window filtering and malformed-value handling.
+- Expanded safe handling of common corrupt model artifacts.
+- Prevented queued experiment cancellation from being overwritten by runner startup.
+
+These changes are included in `AI_Based_Load_Balancing_v1.0.7.zip`.
 
 ## Known limitations
 

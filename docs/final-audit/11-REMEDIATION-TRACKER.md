@@ -16,6 +16,10 @@ Status values are **PASS**, **PARTIAL**, **BLOCKED**, **NOT TESTED**, or **OPEN*
 | R-10 | Medium | 08 | Stale Phase 6/API/architecture documentation | Mark historical reports and align API contract/readme with current routes | Phase 6 historical notice, release notes, checklists, and API/readme links updated; architecture reconciliation remains | PARTIAL |
 | R-11 | Medium | 08 | Archive name `v1.0.0` versus submission tag `v1.0.1`; model excluded | Add release manifest/readme explanation and clean model provisioning instructions without changing historical data | `docs/RELEASE_MANIFEST.md` added and linked | PASS |
 | R-12 | Environmental | 00, 08 | Office renderer unavailable; academic placeholders remain | Manual Word/PowerPoint inspection and fill institution details | Human inspection | BLOCKED |
+| R-13 | High | 04, 06 | Experiment list/detail/export reads are unauthenticated | Require authorization for sensitive experiment data or explicitly limit deployment to trusted localhost access | Current endpoints are readable without `X-Admin-Token`; localhost binding reduces exposure but does not replace endpoint authorization | OPEN |
+| R-14 | High | 04, 07 | Experiment `target_base_url` is arbitrary and receives the admin token | Constrain targets to an operator-configured allowlist or same control-plane origin before untrusted deployment | Current schema accepts any URL and runner forwards the admin token | OPEN |
+| R-15 | Medium | 03, 06 | Frontend dependency lock drift and build-time token path | Pin and synchronize dependencies; keep operator token out of Vite assets | `npm ci`, Docker frontend build, and source search pass; no build-time token path remains | PASS |
+| R-16 | Medium | 06, 07 | Root Alembic import failure, malformed telemetry handling, cancellation race, and narrow model exception handling | Make local migration invocation, worker parsing, cancellation, and fallback behavior deterministic | Root `alembic heads`, backend suite, and targeted source validation pass | PASS |
 
 ## Closure rules
 

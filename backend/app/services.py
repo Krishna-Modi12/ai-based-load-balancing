@@ -28,19 +28,30 @@ async def collect_health(db: Session, backend: BackendNode, settings: Settings) 
         backend.health_status = "healthy"
         backend.last_health_at = datetime.now(timezone.utc)
         db.add(TelemetrySample(
-            backend_id=backend.id, cpu_percent=data.get("cpu_percent"), memory_percent=data.get("memory_percent"),
-            active_requests=max(0, int(data.get("active_requests", 0))),
-            latency_ewma_ms=data.get("latency_ewma_ms"), network_rtt_ms=(time.perf_counter() - start) * 1000,
-            error_rate=min(1, max(0, float(data.get("error_rate", 0)))), success_rate=min(1, max(0, float(data.get("success_rate", 1)))),
+            backend_id=backend.id,             cpu_percent=_finite_number(data.get("cpu_percent")),
+            memory_percent=_finite_number(data.get("memory_percent")),
+            active_requests=max(0, int(_finite_number(data.get("active_requests")) or 0)),
+            latency_ewma_ms=_finite_number(data.get("latency_ewma_ms")),
+            network_rtt_ms=(time.perf_counter() - start) * 1000,
+            error_rate=min(1, max(0, _finite_number(data.get("error_rate")) or 0)),
+            success_rate=min(1, max(0, _finite_number(data.get("success_rate")) if data.get("success_rate") is not None else 1)),
             telemetry_source="simulated" if data.get("simulated", False) else "worker_metrics",
         ))
         db.commit()
         return True
-    except (httpx.HTTPError, ValueError, RuntimeError):
+    except (httpx.HTTPError, ValueError, TypeError, OverflowError, RuntimeError):
         backend.health_status = "unhealthy"
         backend.last_health_at = datetime.now(timezone.utc)
         db.commit()
         return False
+
+
+def _finite_number(value: object) -> float | None:
+    try:
+        number = float(value)
+    except (TypeError, ValueError, OverflowError):
+        return None
+    return number if number == number and abs(number) != float("inf") else None
 
 
 def eligible_backends(db: Session, settings: Settings) -> list[BackendNode]:

@@ -337,8 +337,10 @@ def metrics_timeseries(metric: str = Query("p95_latency", pattern="^(p95_latency
 def backend_metrics(backend_id: str, window: str = Query("15m", pattern="^(5m|15m|1h)$"), db: Session = Depends(get_db)):
     if not db.get(BackendNode, backend_id):
         raise HTTPException(404, "Backend not found")
+    cutoff = datetime.now(timezone.utc) - {"5m": timedelta(minutes=5), "15m": timedelta(minutes=15), "1h": timedelta(hours=1)}[window]
     samples = list(db.scalars(select(TelemetrySample).where(
-        TelemetrySample.backend_id == backend_id
+        TelemetrySample.backend_id == backend_id,
+        TelemetrySample.sampled_at >= cutoff,
     ).order_by(TelemetrySample.sampled_at.desc()).limit(200)))
     return {"backend_id": backend_id, "window": window, "samples": [
         {column.name: getattr(sample, column.name) for column in TelemetrySample.__table__.columns}

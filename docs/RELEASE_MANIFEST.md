@@ -9,6 +9,7 @@
 - `AI_Based_Load_Balancing_v1.0.4.zip` contains the frontend hardening commit `3f49f6f`.
 - `AI_Based_Load_Balancing_v1.0.5.zip` is a preserved release candidate containing the in-memory-only admin-token correction from `2dc6361`.
 - `AI_Based_Load_Balancing_v1.0.6.zip` is the current final release candidate with the latest release-manifest and audit consistency updates.
+- `AI_Based_Load_Balancing_v1.0.7.zip` includes the full-system audit fixes and is the current candidate.
 
 The archive name is intentionally unchanged so historical references remain
 stable. Use the tag, not the filename alone, when identifying the complete
@@ -28,7 +29,7 @@ claim that a clean archive contains an active model.
 
 ## Current release verification
 
-- Current archive: `AI_Based_Load_Balancing_v1.0.6.zip`
+- Current archive: `AI_Based_Load_Balancing_v1.0.7.zip`
 - Archive contents: 113 files
 - Excludes `.env`, local databases, `node_modules`, build caches, logs, and nested archives.
 - Backend tests: 25 passed.

@@ -2,6 +2,8 @@ from __future__ import annotations
 
 from datetime import datetime, timezone
 from pathlib import Path
+from pickle import UnpicklingError
+from zipfile import BadZipFile
 
 import joblib
 from sklearn.ensemble import RandomForestRegressor
@@ -70,7 +72,7 @@ def _load_predictor(version: ModelVersion) -> StoredPredictor | None:
         if payload.get("feature_names") != FEATURE_NAMES or payload.get("schema") != FEATURE_SCHEMA_VERSION:
             return None
         return StoredPredictor(payload["model"], version.id)
-    except (OSError, ValueError, KeyError, TypeError, AttributeError, ImportError):
+    except (OSError, ValueError, KeyError, TypeError, AttributeError, ImportError, EOFError, UnpicklingError, BadZipFile, RuntimeError):
         return None
 
 

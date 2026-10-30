@@ -30,3 +30,15 @@ PARTIAL and BLOCKED remain open.
 ## Release documentation
 
 - **PASS:** `FINAL_RELEASE_CHECKLIST.md`, `ACADEMIC_SUBMISSION_CHECKLIST.md`, and `FINAL_RELEASE_NOTES.md` record verified evidence, manual student input, release exclusions, and remaining limitations.
+
+## Full-system audit findings
+
+- **FIXED:** Frontend `package-lock.json` now matches pinned dependencies; Docker uses reproducible `npm ci`.
+- **FIXED:** Root-level Alembic commands import the application correctly.
+- **FIXED:** Backend metrics apply requested time windows; worker telemetry parsing rejects malformed numeric values safely.
+- **FIXED:** Common corrupt-model deserialization errors fall back safely.
+- **FIXED:** Compose API/frontend ports bind to localhost by default.
+- **FIXED:** Queued experiment cancellation is checked before runner startup.
+- **OPEN:** Experiment list/detail/export endpoints expose stored experiment data without admin authorization.
+- **OPEN:** Experiment `target_base_url` is accepted as arbitrary input; constrain it before untrusted multi-user deployment to prevent server-side request abuse and admin-token forwarding.
+- **OPEN:** Rate limiting, resource quotas, circuit breaking, graceful shutdown, scheduled health checks, and model freshness enforcement remain absent.

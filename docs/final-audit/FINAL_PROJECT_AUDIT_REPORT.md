@@ -36,3 +36,25 @@ Of 12 tracked findings, 5 are PASS (PostgreSQL/clean install, browser controls, 
 The project is suitable for an academic demonstration after manual document completion and visual inspection, provided historical runtime evidence is clearly labelled. It should not be presented as a production-ready multi-user control plane without the remediation backlog in `10_REMAINING_WORK.md`.
 
 The defensible research statement is: **in the measured local workload, AI routing added substantial overhead and performed worse than both conventional baselines; the experiment demonstrates the importance of measuring complexity rather than assuming it improves performance.**
+
+## Full-system audit update
+
+The latest audit found and corrected several release-breaking issues: the
+frontend dependency lockfile was inconsistent with `package.json`, the
+frontend container used non-reproducible `npm install`, root-level Alembic
+commands could not import the application, telemetry metrics ignored their
+requested backend time window, malformed worker metrics could raise uncaught
+type errors, damaged model artifacts missed common deserialization failures,
+the Compose API/frontend ports were exposed on all host interfaces, and
+queued experiment cancellation could race with runner startup. These fixes
+were validated with 25 backend tests, a clean `npm ci` plus production build,
+root-level `alembic heads`, Python compilation, Docker frontend build, and
+Compose configuration validation.
+
+The audit also identified remaining risks that are not claimed as resolved:
+experiment list/detail/export reads are unauthenticated, experiment
+`target_base_url` is operator-controlled and should be constrained before
+untrusted multi-user deployment, production rate/resource limits and
+circuit-breaking are absent, and full multi-process policy and clean model
+provisioning tests remain outstanding. The frontend no longer accepts or
+persists a build-time admin token; operator tokens are entered in memory only.
