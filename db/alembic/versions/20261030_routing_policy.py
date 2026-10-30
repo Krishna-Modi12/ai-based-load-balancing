@@ -21,7 +21,11 @@ def upgrade():
             sa.Column("policy", sa.String(length=30), nullable=False, server_default="round_robin"),
             sa.Column("updated_at", sa.DateTime(timezone=True), nullable=True),
         )
-    op.execute("INSERT INTO routing_policy (id, policy) VALUES (1, 'round_robin') ON CONFLICT (id) DO NOTHING")
+    op.execute(
+        "INSERT INTO routing_policy (id, policy, updated_at) "
+        "VALUES (1, 'round_robin', CURRENT_TIMESTAMP) "
+        "ON CONFLICT (id) DO NOTHING"
+    )
 
 
 def downgrade():
