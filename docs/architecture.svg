@@ -1,0 +1,96 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1200" height="680" viewBox="0 0 1200 680" role="img" aria-labelledby="title desc">
+  <title id="title">AI-Based Load Balancing architecture</title>
+  <desc id="desc">Clients send HTTP traffic to the React dashboard or FastAPI Layer-7 proxy. The routing engine selects one of three Docker workers using conventional or AI policies, while PostgreSQL stores telemetry, decisions, models, and experiments.</desc>
+  <defs>
+    <linearGradient id="bg" x1="0" x2="1" y1="0" y2="1">
+      <stop offset="0" stop-color="#07111f"/>
+      <stop offset="1" stop-color="#101d32"/>
+    </linearGradient>
+    <linearGradient id="cyan" x1="0" x2="1">
+      <stop offset="0" stop-color="#06b6d4"/>
+      <stop offset="1" stop-color="#22d3ee"/>
+    </linearGradient>
+    <linearGradient id="violet" x1="0" x2="1">
+      <stop offset="0" stop-color="#7c3aed"/>
+      <stop offset="1" stop-color="#c084fc"/>
+    </linearGradient>
+    <filter id="glow">
+      <feGaussianBlur stdDeviation="5" result="blur"/>
+      <feMerge><feMergeNode in="blur"/><feMergeNode in="SourceGraphic"/></feMerge>
+    </filter>
+    <marker id="arrow" markerWidth="10" markerHeight="10" refX="8" refY="5" orient="auto">
+      <path d="M0,0 L10,5 L0,10 z" fill="#67e8f9"/>
+    </marker>
+    <style>
+      .title { font: 700 28px Inter,Segoe UI,sans-serif; fill: #f8fafc }
+      .subtitle { font: 400 14px Inter,Segoe UI,sans-serif; fill: #94a3b8 }
+      .label { font: 700 16px Inter,Segoe UI,sans-serif; fill: #f8fafc }
+      .body { font: 400 13px Inter,Segoe UI,sans-serif; fill: #cbd5e1 }
+      .mono { font: 600 12px ui-monospace,SFMono-Regular,Consolas,monospace; fill: #67e8f9 }
+      .box { stroke: #29415f; stroke-width: 1.5 }
+      .line { fill: none; stroke: #67e8f9; stroke-width: 2; marker-end: url(#arrow); stroke-dasharray: 8 7 }
+    </style>
+  </defs>
+  <rect width="1200" height="680" rx="22" fill="url(#bg)"/>
+  <circle cx="1060" cy="80" r="180" fill="#0891b2" opacity=".08"/>
+  <circle cx="180" cy="600" r="220" fill="#7c3aed" opacity=".07"/>
+  <text x="54" y="58" class="title">NET//PULSE · Layer-7 intelligent load balancer</text>
+  <text x="54" y="84" class="subtitle">HTTP routing, telemetry, supervised latency prediction, persistence, and operator control</text>
+
+  <rect x="54" y="170" width="190" height="150" rx="16" fill="#12243b" class="box"/>
+  <text x="78" y="207" class="label">Clients</text>
+  <text x="78" y="234" class="body">Browser dashboard</text>
+  <text x="78" y="257" class="body">HTTP / API clients</text>
+  <text x="78" y="292" class="mono">localhost:5173</text>
+
+  <rect x="326" y="130" width="330" height="235" rx="18" fill="#102b3c" stroke="#06b6d4" stroke-width="2"/>
+  <text x="356" y="170" class="label">FastAPI control plane</text>
+  <text x="356" y="198" class="body">Layer-7 reverse proxy</text>
+  <text x="356" y="221" class="body">Policy selection + request IDs</text>
+  <text x="356" y="244" class="body">Health checks + telemetry</text>
+  <text x="356" y="267" class="body">Timeouts + failover</text>
+  <rect x="356" y="292" width="270" height="45" rx="9" fill="#07111f" stroke="#155e75"/>
+  <text x="374" y="319" class="mono">RR · WRR · LC · Hash · AI</text>
+
+  <rect x="756" y="112" width="190" height="120" rx="16" fill="#21153d" stroke="#8b5cf6" stroke-width="1.5"/>
+  <text x="782" y="151" class="label">AI routing</text>
+  <text x="782" y="178" class="body">Random Forest</text>
+  <text x="782" y="199" class="body">latency prediction</text>
+  <text x="782" y="220" class="mono">safe LC fallback</text>
+
+  <rect x="990" y="112" width="158" height="120" rx="16" fill="#172b28" stroke="#10b981" stroke-width="1.5"/>
+  <text x="1015" y="151" class="label">PostgreSQL</text>
+  <text x="1015" y="179" class="body">decisions</text>
+  <text x="1015" y="199" class="body">telemetry</text>
+  <text x="1015" y="219" class="body">models + runs</text>
+
+  <rect x="690" y="330" width="458" height="250" rx="18" fill="#101d32" class="box"/>
+  <text x="720" y="370" class="label">Docker worker cluster</text>
+  <text x="720" y="394" class="subtitle">registered HTTP backends</text>
+  <rect x="720" y="424" width="120" height="112" rx="12" fill="#0c3040" stroke="#06b6d4"/>
+  <text x="742" y="457" class="label">worker-a</text>
+  <text x="742" y="482" class="body">fast · 15 ms</text>
+  <text x="742" y="510" class="mono">capacity 2x</text>
+  <rect x="858" y="424" width="120" height="112" rx="12" fill="#35250d" stroke="#f59e0b"/>
+  <text x="880" y="457" class="label">worker-b</text>
+  <text x="880" y="482" class="body">slow · 60 ms</text>
+  <text x="880" y="510" class="mono" style="fill:#fbbf24">capacity 1x</text>
+  <rect x="996" y="424" width="120" height="112" rx="12" fill="#1e2147" stroke="#818cf8"/>
+  <text x="1018" y="457" class="label">worker-c</text>
+  <text x="1018" y="482" class="body">medium · 30 ms</text>
+  <text x="1018" y="510" class="mono" style="fill:#a5b4fc">capacity 1x</text>
+
+  <path d="M244 245 C275 245 290 245 326 245" class="line"/>
+  <path d="M656 210 C700 190 716 180 756 180" class="line"/>
+  <path d="M656 250 C780 210 870 185 990 175" class="line"/>
+  <path d="M656 310 C690 350 700 390 720 424" class="line"/>
+  <path d="M656 315 C750 365 810 398 858 424" class="line"/>
+  <path d="M656 320 C830 390 930 410 996 424" class="line"/>
+
+  <rect x="54" y="475" width="570" height="105" rx="16" fill="#0b1729" class="box"/>
+  <text x="80" y="512" class="label">Operator workflow</text>
+  <text x="80" y="538" class="body">Dashboard → choose policy → send traffic → inspect decisions</text>
+  <text x="80" y="562" class="body">Auto-pilot simulation → chaos scenario → observe safe fallback</text>
+
+  <text x="54" y="635" class="mono">All routing decisions are measurable, persisted, and reproducible.</text>
+</svg>
