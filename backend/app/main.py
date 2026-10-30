@@ -3,7 +3,7 @@ from __future__ import annotations
 import time
 import uuid
 import threading
-from datetime import datetime, timezone
+from datetime import datetime, timedelta, timezone
 from contextlib import asynccontextmanager
 from concurrent.futures import ThreadPoolExecutor
 import csv
@@ -19,7 +19,7 @@ from sqlalchemy.orm import Session
 
 from .config import get_settings
 from .database import SessionLocal, get_db
-from .ml import load_active_predictor, train_model
+from .ml import load_active_predictor, load_model_version, train_model
 from .experiments import CANCEL_EVENTS, run_experiment_in_thread
 from .models import BackendNode, ExperimentMetric, ExperimentRun, ModelVersion, RoutingDecision, RoutingPolicy, TelemetrySample
 from .routing import Router
@@ -266,7 +266,6 @@ def decisions(limit: int = Query(50, ge=1, le=200), db: Session = Depends(get_db
 @app.post("/api/v1/policies", dependencies=[Depends(require_admin)])
 def set_policy(payload: PolicyUpdate, db: Session = Depends(get_db)):
     global active_policy
-    active_policy = payload.policy
     policy = db.get(RoutingPolicy, 1)
     if policy is None:
         policy = RoutingPolicy(id=1, policy=payload.policy)
@@ -274,7 +273,8 @@ def set_policy(payload: PolicyUpdate, db: Session = Depends(get_db)):
     else:
         policy.policy = payload.policy
     db.commit()
-    return {"policy": active_policy}
+    db.refresh(policy)
+    return {"policy": policy.policy}
 
 
 @app.get("/api/v1/routing/mode", response_model=PolicyOut)
@@ -294,7 +294,8 @@ def routing_decisions(limit: int = Query(50, ge=1, le=200), db: Session = Depend
 
 @app.get("/api/v1/metrics/summary")
 def metrics_summary(window: str = Query("5m", pattern="^(5m|15m|1h)$"), db: Session = Depends(get_db)):
-    rows = list(db.scalars(select(RoutingDecision).order_by(RoutingDecision.decided_at.desc()).limit(1000)))
+    cutoff = datetime.now(timezone.utc) - {"5m": timedelta(minutes=5), "15m": timedelta(minutes=15), "1h": timedelta(hours=1)}[window]
+    rows = list(db.scalars(select(RoutingDecision).where(RoutingDecision.decided_at >= cutoff).order_by(RoutingDecision.decided_at.desc()).limit(1000)))
     latencies = sorted(row.actual_latency_ms for row in rows if row.actual_latency_ms is not None)
     successes = sum(1 for row in rows if row.success)
     return {
@@ -312,11 +313,24 @@ def metrics_timeseries(metric: str = Query("p95_latency", pattern="^(p95_latency
                        window: str = Query("15m", pattern="^(5m|15m|1h)$"),
                        step: str = Query("10s", pattern="^\\d+s$"),
                        db: Session = Depends(get_db)):
-    rows = list(db.scalars(select(RoutingDecision).order_by(RoutingDecision.decided_at.desc()).limit(1000)))
-    return {"metric": metric, "window": window, "step": step, "points": [
-        {"timestamp": row.decided_at, "value": row.actual_latency_ms if metric == "p95_latency" else int(row.success) if metric == "success_rate" else 1}
-        for row in reversed(rows)
-    ]}
+    cutoff = datetime.now(timezone.utc) - {"5m": timedelta(minutes=5), "15m": timedelta(minutes=15), "1h": timedelta(hours=1)}[window]
+    step_seconds = max(1, int(step[:-1]))
+    rows = list(db.scalars(select(RoutingDecision).where(RoutingDecision.decided_at >= cutoff).order_by(RoutingDecision.decided_at).limit(5000)))
+    buckets: dict[int, list[RoutingDecision]] = {}
+    for row in rows:
+        bucket = int(row.decided_at.timestamp()) // step_seconds * step_seconds
+        buckets.setdefault(bucket, []).append(row)
+    points = []
+    for bucket, bucket_rows in buckets.items():
+        latencies = sorted(row.actual_latency_ms for row in bucket_rows if row.actual_latency_ms is not None)
+        if metric == "p95_latency":
+            value = _percentile(latencies, 0.95)
+        elif metric == "success_rate":
+            value = sum(1 for row in bucket_rows if row.success) / len(bucket_rows)
+        else:
+            value = sum(1 for row in bucket_rows) / step_seconds
+        points.append({"timestamp": datetime.fromtimestamp(bucket, tz=timezone.utc), "value": value})
+    return {"metric": metric, "window": window, "step": step, "points": points}
 
 
 @app.get("/api/v1/metrics/backends/{backend_id}")
@@ -348,7 +362,7 @@ def activate_model(version: str, db: Session = Depends(get_db)):
     model = db.scalar(select(ModelVersion).where(ModelVersion.version == version))
     if not model:
         raise HTTPException(404, "Model version not found")
-    if load_active_predictor(db) is None and model.version != version:
+    if load_model_version(db, version) is None:
         raise HTTPException(422, "Model artifact is not valid")
     db.query(ModelVersion).update({ModelVersion.is_active: False})
     model.is_active = True

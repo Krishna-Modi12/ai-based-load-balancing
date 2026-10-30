@@ -62,8 +62,7 @@ def train_model(db: Session, settings: Settings) -> ModelVersion:
     return saved
 
 
-def load_active_predictor(db: Session) -> StoredPredictor | None:
-    version = db.scalar(select(ModelVersion).where(ModelVersion.is_active.is_(True)))
+def _load_predictor(version: ModelVersion) -> StoredPredictor | None:
     if version is None or version.feature_schema_version != FEATURE_SCHEMA_VERSION:
         return None
     try:
@@ -73,3 +72,12 @@ def load_active_predictor(db: Session) -> StoredPredictor | None:
         return StoredPredictor(payload["model"], version.id)
     except (OSError, ValueError, KeyError, TypeError, AttributeError, ImportError):
         return None
+
+
+def load_active_predictor(db: Session) -> StoredPredictor | None:
+    return _load_predictor(db.scalar(select(ModelVersion).where(ModelVersion.is_active.is_(True))))
+
+
+def load_model_version(db: Session, version: str) -> StoredPredictor | None:
+    """Validate a specific persisted artifact before activation."""
+    return _load_predictor(db.scalar(select(ModelVersion).where(ModelVersion.version == version)))

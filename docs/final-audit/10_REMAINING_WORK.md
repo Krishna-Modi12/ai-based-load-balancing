@@ -21,8 +21,12 @@ PARTIAL and BLOCKED remain open.
 
 - **PARTIAL:** Timeout injection is runner-owned; missing-model and stale-telemetry scenarios are explicitly operator-injected and recorded.
 - **PARTIAL:** Active policy is persisted in PostgreSQL/SQLite through `routing_policy`; multi-process concurrency testing remains.
-- **PARTIAL:** Most API contract routes and consistent error/request-ID envelopes are now implemented; timeseries aggregation and model activation require further hardening.
+- **PARTIAL:** Most API contract routes and consistent error/request-ID envelopes are now implemented; requested metric windows/step buckets and model artifact activation validation are implemented, while broader lifecycle hardening remains.
 - **PASS:** Experiment creation is protected.
 - Add rate limits, circuit breaker, scheduled health checks, request limits, graceful shutdown, and model freshness rules.
 - Expand the frontend with operational controls and loading/freshness states.
 - **PASS:** Playwright exercised the live dashboard controls; keep browser regression coverage in future changes.
+
+## Release documentation
+
+- **PASS:** `FINAL_RELEASE_CHECKLIST.md`, `ACADEMIC_SUBMISSION_CHECKLIST.md`, and `FINAL_RELEASE_NOTES.md` record verified evidence, manual student input, release exclusions, and remaining limitations.
