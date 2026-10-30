@@ -26,7 +26,11 @@ import {
   Sliders,
   Send,
   Eye,
-  EyeOff
+  EyeOff,
+  Network,
+  GitBranch,
+  ChevronDown,
+  ChevronUp
 } from "lucide-react";
 import "./style.css";
 
@@ -146,10 +150,11 @@ function App() {
   const [notice, setNotice] = useState("");
   const [isRefreshing, setIsRefreshing] = useState(false);
   const [adminToken, setAdminToken] = useState("");
-  const [activeTab, setActiveTab] = useState<"live" | "matrix" | "guide">("live");
+  const [activeTab, setActiveTab] = useState<"diagram" | "live" | "matrix" | "guide">("diagram");
   const [searchFilter, setSearchFilter] = useState("");
   const [tokenVisible, setTokenVisible] = useState(false);
   const [isAutoRefresh, setIsAutoRefresh] = useState(true);
+  const [showBeginnerGuide, setShowBeginnerGuide] = useState(false);
 
   // Playground state
   const [selectedClass, setSelectedClass] = useState<"light" | "normal" | "heavy">("normal");
@@ -359,6 +364,9 @@ function App() {
     p95 = withLatency[Math.min(withLatency.length - 1, Math.floor(withLatency.length * 0.95))];
   }
 
+  // Active target worker for diagram (defaults to lastResult or first decision)
+  const activeWorkerName = lastResult?.backend || (decisions[0]?.selected_backend_id ? backendMap.get(decisions[0].selected_backend_id) || "worker-a" : "worker-a");
+
   return (
     <div className="min-h-screen bg-surface-lowest text-slate-100 flex flex-col font-sans selection:bg-primary/20 selection:text-primary">
       {/* ======================================================== */}
@@ -368,7 +376,7 @@ function App() {
         {/* Brand */}
         <div className="flex items-center gap-4 sm:gap-6">
           <div className="flex items-center gap-2.5">
-            <div className="w-8 h-8 rounded bg-primary/10 border border-primary/30 flex items-center justify-center text-primary glow-primary">
+            <div className="w-8 h-8 rounded-lg bg-primary/10 border border-primary/30 flex items-center justify-center text-primary glow-primary">
               <Radio className="w-4 h-4 animate-pulse" />
             </div>
             <div>
@@ -384,7 +392,7 @@ function App() {
           </div>
 
           {/* System Status Indicator */}
-          <div className="hidden lg:flex items-center gap-2 px-3 py-1 bg-surface-low border border-border-subtle rounded font-mono text-xs">
+          <div className="hidden lg:flex items-center gap-2 px-3 py-1 bg-surface-low border border-border-subtle rounded-md font-mono text-xs">
             <span className="w-2 h-2 rounded-full bg-secondary animate-beacon shadow-[0_0_8px_rgba(16,185,129,0.7)]" />
             <span className="text-secondary font-medium">Cluster Online</span>
             <span className="text-slate-600">|</span>
@@ -393,19 +401,34 @@ function App() {
           </div>
 
           {/* AI Model State */}
-          <div className="hidden xl:flex items-center gap-1.5 px-2.5 py-1 bg-surface-low border border-border-subtle rounded font-mono text-xs text-slate-300">
+          <div className="hidden xl:flex items-center gap-1.5 px-2.5 py-1 bg-surface-low border border-border-subtle rounded-md font-mono text-xs text-slate-300">
             <Sparkles className="w-3.5 h-3.5 text-tertiary" />
-            <span>Predictor:</span>
+            <span>AI Predictor:</span>
             <span className={`font-semibold ${status.model_ready ? "text-tertiary" : "text-amber"}`}>
               {status.model_ready ? status.model_version || "Trained & Active" : "Untrained (Fallback Active)"}
             </span>
           </div>
         </div>
 
-        {/* Top Controls: Admin Token & Maintenance */}
+        {/* Top Controls: Admin Token & Helpers */}
         <div className="flex items-center gap-2 sm:gap-3">
+          {/* Beginner Guide Toggle Button */}
+          <button
+            onClick={() => setShowBeginnerGuide(!showBeginnerGuide)}
+            className={`flex items-center gap-1.5 px-2.5 py-1 rounded-md border text-xs font-mono transition-all ${
+              showBeginnerGuide
+                ? "bg-primary text-slate-950 font-bold border-primary"
+                : "bg-surface-low hover:bg-surface-high text-primary border-primary/30"
+            }`}
+            title="Toggle plain-English explanation of how this works"
+          >
+            <HelpCircle className="w-3.5 h-3.5" />
+            <span className="hidden sm:inline">How It Works</span>
+            {showBeginnerGuide ? <ChevronUp className="w-3 h-3" /> : <ChevronDown className="w-3 h-3" />}
+          </button>
+
           {/* Admin Token Drawer */}
-          <div className="flex items-center bg-surface-low border border-border-subtle rounded px-2.5 py-1">
+          <div className="flex items-center bg-surface-low border border-border-subtle rounded-md px-2.5 py-1">
             <Key className="w-3.5 h-3.5 text-slate-400 mr-1.5 shrink-0" />
             <input
               type={tokenVisible ? "text" : "password"}
@@ -435,7 +458,7 @@ function App() {
           {/* Auto Refresh Toggle */}
           <button
             onClick={() => setIsAutoRefresh(!isAutoRefresh)}
-            className={`hidden sm:flex items-center gap-1.5 px-2.5 py-1 rounded border text-xs font-mono transition-colors ${
+            className={`hidden sm:flex items-center gap-1.5 px-2.5 py-1 rounded-md border text-xs font-mono transition-colors ${
               isAutoRefresh
                 ? "bg-secondary/10 border-secondary/30 text-secondary"
                 : "bg-surface-low border-border text-slate-500"
@@ -450,7 +473,7 @@ function App() {
           <button
             onClick={() => refresh(false)}
             disabled={isRefreshing}
-            className="p-1.5 bg-surface-low hover:bg-surface-high border border-border-subtle rounded text-slate-300 transition-colors"
+            className="p-1.5 bg-surface-low hover:bg-surface-high border border-border-subtle rounded-md text-slate-300 transition-colors"
             title="Manual sync"
           >
             <RotateCcw className={`w-4 h-4 ${isRefreshing ? "animate-spin text-primary" : ""}`} />
@@ -484,7 +507,7 @@ function App() {
           <div className="flex items-center gap-2">
             <AlertTriangle className="w-4 h-4 text-amber shrink-0 animate-pulse" />
             <span>
-              <strong>Telemetry is Stale (&gt;100s):</strong> The load balancer router requires recent health observations to dispatch traffic.
+              <strong>Telemetry is Stale (&gt;100s):</strong> The load balancer router requires recent health observations to safely dispatch traffic.
             </span>
           </div>
           <button
@@ -497,6 +520,59 @@ function App() {
       )}
 
       {/* ======================================================== */}
+      {/* COLLAPSIBLE BEGINNER'S GUIDE (PLAIN ENGLISH EXPLAINER)   */}
+      {/* ======================================================== */}
+      {showBeginnerGuide && (
+        <section className="bg-surface-low border-b border-primary/30 px-6 py-5 bg-gradient-to-b from-primary/5 to-transparent transition-all animate-fadeIn">
+          <div className="max-w-[1440px] mx-auto">
+            <div className="flex items-center justify-between pb-3 border-b border-border-subtle">
+              <div className="flex items-center gap-2">
+                <Info className="w-5 h-5 text-primary" />
+                <h2 className="font-mono text-sm font-bold text-slate-100 uppercase tracking-wider">
+                  Plain-English Guide: How This System Works & Why It Matters
+                </h2>
+              </div>
+              <button
+                onClick={() => setShowBeginnerGuide(false)}
+                className="text-xs font-mono text-slate-400 hover:text-slate-200"
+              >
+                Close ✕
+              </button>
+            </div>
+
+            <div className="grid grid-cols-1 md:grid-cols-3 gap-6 mt-4 text-xs font-sans">
+              <div className="bg-surface border border-border-subtle rounded-xl p-4">
+                <div className="font-mono font-bold text-primary text-sm flex items-center gap-1.5 mb-1.5">
+                  <span>1. What is a Load Balancer?</span>
+                </div>
+                <p className="text-slate-300 leading-relaxed">
+                  When millions of users visit a website simultaneously, one single computer would crash. A <strong>load balancer</strong> acts like an air traffic controller at an airport, distributing incoming user requests across a fleet of backend servers so no single machine gets overloaded.
+                </p>
+              </div>
+
+              <div className="bg-surface border border-border-subtle rounded-xl p-4">
+                <div className="font-mono font-bold text-tertiary text-sm flex items-center gap-1.5 mb-1.5">
+                  <span>2. Why Do Old Algorithms Fail?</span>
+                </div>
+                <p className="text-slate-300 leading-relaxed">
+                  Classic algorithms like <strong>Round Robin</strong> blindly assign requests in a circle (1 &rarr; 2 &rarr; 3). But real cloud servers are <em>asymmetric</em>: some are fast, some are slow (like <code>Worker B</code> at 60ms). Sending heavy traffic to a slow server causes huge queues and angry users.
+                </p>
+              </div>
+
+              <div className="bg-surface border border-border-subtle rounded-xl p-4">
+                <div className="font-mono font-bold text-secondary text-sm flex items-center gap-1.5 mb-1.5">
+                  <span>3. How Does Our AI Model Fix It?</span>
+                </div>
+                <p className="text-slate-300 leading-relaxed">
+                  Our system uses a <strong>Random Forest Regression</strong> machine learning model. It reads live CPU usage, active connections, and historical latency, then calculates: <em>"Which server will finish this specific request fastest?"</em> and routes traffic along the <strong>Optimal Path</strong>!
+                </p>
+              </div>
+            </div>
+          </div>
+        </section>
+      )}
+
+      {/* ======================================================== */}
       {/* 2. MAIN WORKSPACE                                        */}
       {/* ======================================================== */}
       <main className="flex-1 max-w-[1440px] w-full mx-auto p-4 sm:p-6 flex flex-col gap-6">
@@ -505,7 +581,7 @@ function App() {
         {/* INTERACTIVE TRAFFIC PLAYGROUND & SIMULATION BOX      */}
         {/* ---------------------------------------------------- */}
         <section className="bg-surface-low border border-border-subtle rounded-xl p-5 shadow-lg relative overflow-hidden">
-          {/* Subtle Cyber Glow Header */}
+          {/* Cyber Accent Line */}
           <div className="absolute top-0 left-0 right-0 h-[2px] bg-gradient-to-r from-primary via-tertiary to-secondary" />
 
           <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-4 pb-4 border-b border-border-subtle">
@@ -517,7 +593,7 @@ function App() {
                 </h1>
               </div>
               <p className="text-xs text-slate-400 mt-1">
-                Dispatch live synthetic traffic through the Layer-7 load balancer to watch routing decisions, response latencies, and AI predictions in real time.
+                Dispatch simulated web requests through the Layer-7 load balancer to watch routing decisions, response latencies, and AI predictions in real time.
               </p>
             </div>
 
@@ -525,7 +601,7 @@ function App() {
             <div className="flex flex-wrap items-center gap-2">
               <button
                 onClick={healthCheck}
-                className="inline-flex items-center gap-1.5 px-3 py-1.5 bg-surface-high hover:bg-surface-bright text-secondary border border-secondary/40 rounded text-xs font-mono font-medium transition-all"
+                className="inline-flex items-center gap-1.5 px-3 py-1.5 bg-surface-high hover:bg-surface-bright text-secondary border border-secondary/40 rounded-md text-xs font-mono font-medium transition-all"
                 title="Poll all workers to refresh latency and CPU telemetry"
               >
                 <CheckCircle2 className="w-3.5 h-3.5" />
@@ -534,7 +610,7 @@ function App() {
 
               <button
                 onClick={trainModel}
-                className="inline-flex items-center gap-1.5 px-3 py-1.5 bg-tertiary/10 hover:bg-tertiary/20 text-tertiary border border-tertiary/40 rounded text-xs font-mono font-medium transition-all"
+                className="inline-flex items-center gap-1.5 px-3 py-1.5 bg-tertiary/10 hover:bg-tertiary/20 text-tertiary border border-tertiary/40 rounded-md text-xs font-mono font-medium transition-all"
                 title="Train Random Forest regressor on latest recorded decisions"
               >
                 <Cpu className="w-3.5 h-3.5" />
@@ -549,11 +625,11 @@ function App() {
             <div className="md:col-span-5 flex flex-col gap-2">
               <span className="text-xs font-mono font-semibold text-slate-300 flex items-center gap-1.5">
                 <Sliders className="w-3.5 h-3.5 text-primary" />
-                <span>1. Select Workload Complexity</span>
+                <span>1. Select Request Complexity</span>
               </span>
               <div className="grid grid-cols-3 gap-2">
                 {[
-                  { id: "light", label: "Light", desc: "Fast (1x CPU)", color: "border-secondary text-secondary bg-secondary/10" },
+                  { id: "light", label: "Light", desc: "Fast (1x CPU ping)", color: "border-secondary text-secondary bg-secondary/10" },
                   { id: "normal", label: "Normal", desc: "Standard API", color: "border-primary text-primary bg-primary/10" },
                   { id: "heavy", label: "Heavy", desc: "High Compute", color: "border-tertiary text-tertiary bg-tertiary/10" },
                 ].map((item) => (
@@ -577,7 +653,7 @@ function App() {
             <div className="md:col-span-4 flex flex-col gap-2">
               <span className="text-xs font-mono font-semibold text-slate-300 flex items-center gap-1.5">
                 <Send className="w-3.5 h-3.5 text-secondary" />
-                <span>2. Dispatch Synthetic Load</span>
+                <span>2. Dispatch Live Traffic</span>
               </span>
               <div className="flex items-center gap-2">
                 <button
@@ -617,7 +693,7 @@ function App() {
             {/* Step 3: Latest Real-time Execution Callout */}
             <div className="md:col-span-3 bg-surface border border-border-subtle rounded-lg p-3 flex flex-col justify-between">
               <div className="flex items-center justify-between text-[11px] font-mono text-slate-400 border-b border-border-subtle pb-1.5">
-                <span className="uppercase">Last Dispatch Result</span>
+                <span className="uppercase font-semibold">Latest Request Result</span>
                 <span className="w-2 h-2 rounded-full bg-secondary animate-pulse" />
               </div>
 
@@ -655,6 +731,80 @@ function App() {
         </section>
 
         {/* ---------------------------------------------------- */}
+        {/* OPTIMAL PATH ARCHITECTURE DIAGRAM & EXPLAINER        */}
+        {/* ---------------------------------------------------- */}
+        <section className="bg-surface-low border border-border-subtle rounded-xl p-5 shadow-lg">
+          <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 pb-3 border-b border-border-subtle">
+            <div>
+              <div className="flex items-center gap-2">
+                <Network className="w-5 h-5 text-primary" />
+                <h2 className="font-mono text-sm font-bold tracking-wide uppercase text-slate-100">
+                  Live Routing Flow & Optimal Path Diagram
+                </h2>
+              </div>
+              <p className="text-xs text-slate-400 mt-0.5">
+                Interactive topological visualization showing how traffic flows from the client through the AI decision engine to the optimal server.
+              </p>
+            </div>
+            <div className="flex items-center gap-2 font-mono text-xs text-slate-400">
+              <span className="px-2 py-0.5 bg-secondary/10 border border-secondary/30 text-secondary rounded">
+                Active Target: {activeWorkerName}
+              </span>
+            </div>
+          </div>
+
+          <div className="grid grid-cols-1 lg:grid-cols-12 gap-6 mt-4 items-center">
+            {/* Visual SVG Diagram */}
+            <div className="lg:col-span-8 bg-surface rounded-xl p-4 border border-border-subtle overflow-x-auto flex justify-center">
+              <OptimalPathSVG
+                activeWorker={activeWorkerName}
+                selectedClass={selectedClass}
+                policy={status.policy}
+                lastResult={lastResult}
+              />
+            </div>
+
+            {/* Step-by-Step Path Explanation */}
+            <div className="lg:col-span-4 flex flex-col gap-3 font-mono text-xs">
+              <div className="bg-surface border border-border-subtle rounded-xl p-4">
+                <div className="flex items-center gap-2 text-primary font-bold text-xs uppercase mb-2">
+                  <GitBranch className="w-4 h-4" />
+                  <span>Why this Path was Chosen?</span>
+                </div>
+                
+                <div className="space-y-3 font-sans text-xs text-slate-300">
+                  <div className="flex items-start gap-2">
+                    <span className="w-5 h-5 rounded-full bg-primary/20 text-primary font-mono text-[10px] flex items-center justify-center shrink-0 font-bold">1</span>
+                    <p>
+                      <strong>Workload Analyzed:</strong> The incoming request was classified as <code>{selectedClass.toUpperCase()}</code>.
+                    </p>
+                  </div>
+
+                  <div className="flex items-start gap-2">
+                    <span className="w-5 h-5 rounded-full bg-tertiary/20 text-tertiary font-mono text-[10px] flex items-center justify-center shrink-0 font-bold">2</span>
+                    <p>
+                      <strong>Telemetry Scored:</strong> Real-time CPU, EWMA response times, and queue depth were fed into the router.
+                    </p>
+                  </div>
+
+                  <div className="flex items-start gap-2">
+                    <span className="w-5 h-5 rounded-full bg-secondary/20 text-secondary font-mono text-[10px] flex items-center justify-center shrink-0 font-bold">3</span>
+                    <p>
+                      <strong>Optimal Decision:</strong> Routed to <strong>{activeWorkerName}</strong> because it provides the lowest predicted waiting time, successfully bypassing slower nodes.
+                    </p>
+                  </div>
+                </div>
+
+                <div className="mt-4 pt-3 border-t border-border-subtle/50 font-mono text-[11px] text-slate-400 flex items-center justify-between">
+                  <span>Routing Strategy:</span>
+                  <span className="text-secondary font-bold uppercase">{status.policy.replace("_", " ")}</span>
+                </div>
+              </div>
+            </div>
+          </div>
+        </section>
+
+        {/* ---------------------------------------------------- */}
         {/* INTERACTIVE POLICY SWITCHER (VISUAL STRATEGY CARDS)  */}
         {/* ---------------------------------------------------- */}
         <section className="flex flex-col gap-3">
@@ -662,7 +812,7 @@ function App() {
             <div className="flex items-center gap-2">
               <Layers className="w-4 h-4 text-primary" />
               <h2 className="font-mono text-sm font-bold tracking-wide uppercase text-slate-100">
-                Routing Policy Strategy
+                Routing Policy Strategy Explained
               </h2>
             </div>
             <span className="text-xs font-mono text-slate-400">
@@ -694,9 +844,12 @@ function App() {
                 <h3 className="font-mono text-base font-bold text-slate-100 mt-1 flex items-center gap-2">
                   <span>Round Robin</span>
                 </h3>
-                <p className="text-xs text-slate-400 mt-2 leading-relaxed">
+                <p className="text-xs text-slate-400 mt-2 leading-relaxed font-sans">
                   Cycles evenly across healthy nodes in order (A &rarr; B &rarr; C). Disregards worker load, CPU spikes, or differing response speeds.
                 </p>
+                <div className="mt-3 p-2 bg-surface-high rounded text-[11px] text-slate-300 font-sans">
+                  <strong>When to use:</strong> Simple clusters where all servers have identical hardware and identical light workloads.
+                </div>
               </div>
               <div className="mt-4 pt-3 border-t border-border-subtle flex items-center justify-between text-[11px] font-mono text-slate-500">
                 <span>Computational Overhead: <strong>0 ms</strong></span>
@@ -727,9 +880,12 @@ function App() {
                 <h3 className="font-mono text-base font-bold text-slate-100 mt-1 flex items-center gap-2">
                   <span>Least Connections</span>
                 </h3>
-                <p className="text-xs text-slate-400 mt-2 leading-relaxed">
-                  Sends incoming traffic to whichever worker has the fewest in-flight requests. Adapts reactively to slow down saturated nodes.
+                <p className="text-xs text-slate-400 mt-2 leading-relaxed font-sans">
+                  Sends incoming traffic to whichever worker has the fewest active in-flight requests. Reacts dynamically when a server becomes overloaded.
                 </p>
+                <div className="mt-3 p-2 bg-surface-high rounded text-[11px] text-slate-300 font-sans">
+                  <strong>When to use:</strong> Long-running database queries, web sockets, or transactions where connections persist.
+                </div>
               </div>
               <div className="mt-4 pt-3 border-t border-border-subtle flex items-center justify-between text-[11px] font-mono text-slate-500">
                 <span>Computational Overhead: <strong>&lt;0.1 ms</strong></span>
@@ -761,9 +917,12 @@ function App() {
                   <span>AI Latency Prediction</span>
                   <Sparkles className="w-4 h-4 text-tertiary" />
                 </h3>
-                <p className="text-xs text-slate-400 mt-2 leading-relaxed">
-                  Random Forest tree regression predicts exact response time for each node using CPU, EWMA latency, active load, and request class to select the fastest server.
+                <p className="text-xs text-slate-400 mt-2 leading-relaxed font-sans">
+                  A Random Forest ML regressor predicts the exact response time for each server using live CPU, EWMA latency, and request class.
                 </p>
+                <div className="mt-3 p-2 bg-surface-high rounded text-[11px] text-slate-300 font-sans">
+                  <strong>When to use:</strong> Heterogeneous cloud fleets with unequal server speeds and variable request complexities.
+                </div>
               </div>
               <div className="mt-4 pt-3 border-t border-border-subtle flex items-center justify-between text-[11px] font-mono text-slate-500">
                 <span>Inference Tax: <strong>~2 ms</strong></span>
@@ -778,7 +937,7 @@ function App() {
         {/* ---------------------------------------------------- */}
         <section className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
           {/* Total Decisions */}
-          <div className="bg-surface-low border border-border-subtle rounded-lg p-4 flex flex-col justify-between">
+          <div className="bg-surface-low border border-border-subtle rounded-xl p-4 flex flex-col justify-between">
             <div className="flex items-center justify-between text-xs font-mono text-slate-400 border-b border-border-subtle/50 pb-2 mb-2">
               <span className="uppercase tracking-wider">Total Decisions</span>
               <Activity className="w-3.5 h-3.5 text-primary" />
@@ -796,7 +955,7 @@ function App() {
           </div>
 
           {/* Cluster Success Rate */}
-          <div className="bg-surface-low border border-border-subtle rounded-lg p-4 flex flex-col justify-between">
+          <div className="bg-surface-low border border-border-subtle rounded-xl p-4 flex flex-col justify-between">
             <div className="flex items-center justify-between text-xs font-mono text-slate-400 border-b border-border-subtle/50 pb-2 mb-2">
               <span className="uppercase tracking-wider">Cluster Success Rate</span>
               <ShieldCheck className="w-3.5 h-3.5 text-secondary" />
@@ -816,7 +975,7 @@ function App() {
           </div>
 
           {/* P95 Tail Latency */}
-          <div className="bg-surface-low border border-border-subtle rounded-lg p-4 flex flex-col justify-between">
+          <div className="bg-surface-low border border-border-subtle rounded-xl p-4 flex flex-col justify-between">
             <div className="flex items-center justify-between text-xs font-mono text-slate-400 border-b border-border-subtle/50 pb-2 mb-2">
               <span className="uppercase tracking-wider">P95 Tail Latency</span>
               <Clock className="w-3.5 h-3.5 text-primary" />
@@ -834,7 +993,7 @@ function App() {
           </div>
 
           {/* ML Predictor State */}
-          <div className="bg-surface-low border border-border-subtle rounded-lg p-4 flex flex-col justify-between">
+          <div className="bg-surface-low border border-border-subtle rounded-xl p-4 flex flex-col justify-between">
             <div className="flex items-center justify-between text-xs font-mono text-slate-400 border-b border-border-subtle/50 pb-2 mb-2">
               <span className="uppercase tracking-wider">AI Model Status</span>
               <Cpu className="w-3.5 h-3.5 text-tertiary" />
@@ -887,7 +1046,6 @@ function App() {
               const isHealthy = b.health_status === "healthy";
               const isFast = b.name === "worker-a";
               const isSlow = b.name === "worker-b";
-              const isMed = b.name === "worker-c";
 
               const diffSeconds = b.last_health_at
                 ? Math.round((Date.now() - new Date(b.last_health_at).getTime()) / 1000)
@@ -1012,6 +1170,18 @@ function App() {
           <div className="flex flex-wrap items-center justify-between px-5 py-3 bg-surface border-b border-border-subtle gap-3">
             <div className="flex items-center gap-1">
               <button
+                onClick={() => setActiveTab("diagram")}
+                className={`px-4 py-1.5 rounded-lg font-mono text-xs font-bold transition-all flex items-center gap-2 ${
+                  activeTab === "diagram"
+                    ? "bg-primary text-slate-950 glow-primary"
+                    : "text-slate-400 hover:text-slate-200 hover:bg-surface-high"
+                }`}
+              >
+                <Network className="w-3.5 h-3.5" />
+                <span>Live Routing Flow</span>
+              </button>
+
+              <button
                 onClick={() => setActiveTab("live")}
                 className={`px-4 py-1.5 rounded-lg font-mono text-xs font-bold transition-all flex items-center gap-2 ${
                   activeTab === "live"
@@ -1020,7 +1190,7 @@ function App() {
                 }`}
               >
                 <Zap className="w-3.5 h-3.5" />
-                <span>Live Routing Stream</span>
+                <span>Decisions Stream</span>
                 <span className={`px-1.5 py-0.2 text-[9px] rounded font-mono ${
                   activeTab === "live" ? "bg-slate-900 text-primary" : "bg-surface-highest text-slate-400"
                 }`}>
@@ -1053,7 +1223,7 @@ function App() {
               </button>
             </div>
 
-            {/* Filter Search */}
+            {/* Filter Search for Live Tab */}
             {activeTab === "live" && (
               <div className="flex items-center gap-2 w-full sm:w-auto">
                 <div className="relative flex items-center flex-1 sm:w-64">
@@ -1078,6 +1248,49 @@ function App() {
             )}
           </div>
 
+          {/* TAB 0: INTERACTIVE ROUTING FLOW */}
+          {activeTab === "diagram" && (
+            <div className="p-6 flex flex-col gap-6">
+              <div className="bg-surface rounded-xl p-5 border border-border-subtle">
+                <h3 className="font-mono text-sm font-bold text-slate-100 uppercase mb-1">
+                  How The Load Balancer Evaluates The Optimal Path
+                </h3>
+                <p className="text-xs text-slate-400 mb-4 font-sans">
+                  Whenever an HTTP request arrives, the router checks the selected policy to decide which backend will process it:
+                </p>
+
+                <div className="grid grid-cols-1 md:grid-cols-3 gap-4 font-mono text-xs">
+                  <div className="p-3 bg-surface-high rounded-lg border border-border-subtle">
+                    <div className="font-bold text-secondary flex items-center gap-1.5 mb-1">
+                      <span>Worker A (⚡ Fast Tier)</span>
+                    </div>
+                    <p className="text-[11px] text-slate-400 font-sans">
+                      Base delay: 15ms. Chosen preferentially by the AI for heavy and standard workloads due to low execution latency.
+                    </p>
+                  </div>
+
+                  <div className="p-3 bg-surface-high rounded-lg border border-border-subtle">
+                    <div className="font-bold text-amber flex items-center gap-1.5 mb-1">
+                      <span>Worker B (🐢 Slow Tier)</span>
+                    </div>
+                    <p className="text-[11px] text-slate-400 font-sans">
+                      Base delay: 60ms. Avoided by AI during load bursts. Dumb algorithms (Round Robin) blindly send traffic here, causing slowdowns.
+                    </p>
+                  </div>
+
+                  <div className="p-3 bg-surface-high rounded-lg border border-border-subtle">
+                    <div className="font-bold text-primary flex items-center gap-1.5 mb-1">
+                      <span>Worker C (⚖️ Medium Tier)</span>
+                    </div>
+                    <p className="text-[11px] text-slate-400 font-sans">
+                      Base delay: 30ms. Acts as a balanced intermediary buffer node when Worker A experiences high concurrency.
+                    </p>
+                  </div>
+                </div>
+              </div>
+            </div>
+          )}
+
           {/* TAB 1: LIVE ROUTING FEED */}
           {activeTab === "live" && (
             <div className="overflow-x-auto">
@@ -1090,7 +1303,7 @@ function App() {
                     <th className="py-2.5 px-4 font-semibold text-right">Predicted Latency</th>
                     <th className="py-2.5 px-4 font-semibold text-right">Actual Latency</th>
                     <th className="py-2.5 px-4 font-semibold text-center">Status</th>
-                    <th className="py-2.5 px-4 font-semibold">Decision Insight & Fallback</th>
+                    <th className="py-2.5 px-4 font-semibold">Path Decision Explanation</th>
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-border-subtle/40">
@@ -1099,6 +1312,18 @@ function App() {
                       ? backendMap.get(d.selected_backend_id) || d.selected_backend_id.slice(0, 8)
                       : "—";
                     const isSuccess = d.success && (d.status_code === 200 || !d.status_code);
+
+                    // Plain English Decision Reason
+                    let reasonText = "Optimal path selected";
+                    if (d.fallback_reason) {
+                      reasonText = `Fallback triggered: ${d.fallback_reason}`;
+                    } else if (d.policy === "ai_latency") {
+                      reasonText = `AI selected ${nodeName} (Predicted ${d.predicted_latency_ms?.toFixed(1) || "?"}ms, lowest latency)`;
+                    } else if (d.policy === "round_robin") {
+                      reasonText = `Sequential cyclic dispatch to ${nodeName}`;
+                    } else if (d.policy === "least_connections") {
+                      reasonText = `Dispatched to ${nodeName} with lowest active connections`;
+                    }
 
                     return (
                       <tr key={d.request_id} className="hover:bg-surface-high/40 transition-colors">
@@ -1142,12 +1367,12 @@ function App() {
                           {d.fallback_reason ? (
                             <span className="text-amber font-mono text-[11px] flex items-center gap-1">
                               <AlertTriangle className="w-3 h-3 text-amber shrink-0" />
-                              <span>{d.fallback_reason}</span>
+                              <span>{reasonText}</span>
                             </span>
                           ) : (
                             <span className="text-secondary text-[11px] flex items-center gap-1">
                               <CheckCircle2 className="w-3 h-3 text-secondary shrink-0" />
-                              <span>Optimal Path</span>
+                              <span>{reasonText}</span>
                             </span>
                           )}
                         </td>
@@ -1245,6 +1470,247 @@ function App() {
 }
 
 // ----------------------------------------------------
+// Interactive Optimal Path SVG Diagram Component
+// ----------------------------------------------------
+function OptimalPathSVG({
+  activeWorker,
+  selectedClass,
+  policy,
+  lastResult,
+}: {
+  activeWorker: string;
+  selectedClass: string;
+  policy: string;
+  lastResult: LastRouteResult | null;
+}) {
+  const isA = activeWorker === "worker-a";
+  const isB = activeWorker === "worker-b";
+  const isC = activeWorker === "worker-c";
+
+  return (
+    <div className="w-full max-w-[760px] flex flex-col items-center">
+      <svg
+        viewBox="0 0 760 260"
+        className="w-full h-auto select-none"
+        style={{ filter: "drop-shadow(0 2px 8px rgba(0,0,0,0.5))" }}
+      >
+        <defs>
+          {/* Gradients */}
+          <linearGradient id="gradOptimalA" x1="0%" y1="0%" x2="100%" y2="0%">
+            <stop offset="0%" stopColor="#06b6d4" />
+            <stop offset="100%" stopColor="#10b981" />
+          </linearGradient>
+          <linearGradient id="gradOptimalB" x1="0%" y1="0%" x2="100%" y2="0%">
+            <stop offset="0%" stopColor="#06b6d4" />
+            <stop offset="100%" stopColor="#f59e0b" />
+          </linearGradient>
+          <linearGradient id="gradOptimalC" x1="0%" y1="0%" x2="100%" y2="0%">
+            <stop offset="0%" stopColor="#06b6d4" />
+            <stop offset="100%" stopColor="#818cf8" />
+          </linearGradient>
+
+          {/* Glow Filters */}
+          <filter id="glowGreen" x="-20%" y="-20%" width="140%" height="140%">
+            <feGaussianBlur stdDeviation="4" result="blur" />
+            <feComposite in="SourceGraphic" in2="blur" operator="over" />
+          </filter>
+          <filter id="glowCyan" x="-20%" y="-20%" width="140%" height="140%">
+            <feGaussianBlur stdDeviation="3" result="blur" />
+            <feComposite in="SourceGraphic" in2="blur" operator="over" />
+          </filter>
+        </defs>
+
+        {/* ---------------- PATHS ---------------- */}
+        {/* Ingress Path: Client -> Router */}
+        <path
+          d="M 120 130 L 260 130"
+          stroke="#06b6d4"
+          strokeWidth="3"
+          strokeDasharray="6 4"
+          className="animate-pulse"
+        />
+
+        {/* Branch Path to Worker A */}
+        <path
+          d="M 390 130 C 470 130, 490 55, 560 55"
+          fill="none"
+          stroke={isA ? "url(#gradOptimalA)" : "#1e293b"}
+          strokeWidth={isA ? "4" : "1.5"}
+          strokeDasharray={isA ? undefined : "4 4"}
+          filter={isA ? "url(#glowGreen)" : undefined}
+          className={isA ? "transition-all duration-300" : "opacity-40"}
+        />
+
+        {/* Branch Path to Worker B */}
+        <path
+          d="M 390 130 C 470 130, 490 130, 560 130"
+          fill="none"
+          stroke={isB ? "url(#gradOptimalB)" : "#1e293b"}
+          strokeWidth={isB ? "4" : "1.5"}
+          strokeDasharray={isB ? undefined : "4 4"}
+          filter={isB ? "url(#glowGreen)" : undefined}
+          className={isB ? "transition-all duration-300" : "opacity-40"}
+        />
+
+        {/* Branch Path to Worker C */}
+        <path
+          d="M 390 130 C 470 130, 490 205, 560 205"
+          fill="none"
+          stroke={isC ? "url(#gradOptimalC)" : "#1e293b"}
+          strokeWidth={isC ? "4" : "1.5"}
+          strokeDasharray={isC ? undefined : "4 4"}
+          filter={isC ? "url(#glowGreen)" : undefined}
+          className={isC ? "transition-all duration-300" : "opacity-40"}
+        />
+
+        {/* ---------------- NODE 1: CLIENT INGRESS ---------------- */}
+        <g transform="translate(15, 85)">
+          <rect
+            width="105"
+            height="90"
+            rx="10"
+            fill="#0b1329"
+            stroke="#1e293b"
+            strokeWidth="1.5"
+          />
+          <text x="52" y="24" fill="#94a3b8" fontSize="10" fontFamily="monospace" textAnchor="middle" fontWeight="bold">
+            CLIENT
+          </text>
+          <text x="52" y="44" fill="#38bdf8" fontSize="12" fontFamily="monospace" textAnchor="middle" fontWeight="bold">
+            127.0.0.1
+          </text>
+          <rect x="15" y="56" width="75" height="20" rx="4" fill="#0284c7" fillOpacity="0.15" stroke="#0284c7" strokeWidth="0.8" />
+          <text x="52" y="70" fill="#38bdf8" fontSize="9" fontFamily="monospace" textAnchor="middle" fontWeight="bold">
+            {selectedClass.toUpperCase()} REQ
+          </text>
+        </g>
+
+        {/* ---------------- NODE 2: AI ROUTER (NET//PULSE CORE) ---------------- */}
+        <g transform="translate(260, 70)">
+          <rect
+            width="130"
+            height="120"
+            rx="12"
+            fill="#0c1833"
+            stroke="#06b6d4"
+            strokeWidth="2"
+            filter="url(#glowCyan)"
+          />
+          <text x="65" y="24" fill="#06b6d4" fontSize="11" fontFamily="monospace" textAnchor="middle" fontWeight="bold">
+            NET//PULSE
+          </text>
+          <text x="65" y="40" fill="#64748b" fontSize="9" fontFamily="monospace" textAnchor="middle">
+            AI DECISION CORE
+          </text>
+
+          <rect x="12" y="52" width="106" height="26" rx="5" fill="#050b14" stroke="#1e293b" strokeWidth="1" />
+          <text x="65" y="68" fill="#e2e8f0" fontSize="9" fontFamily="monospace" textAnchor="middle" fontWeight="bold">
+            {policy === "ai_latency" ? "RANDOM FOREST" : policy === "least_connections" ? "LEAST CONNS" : "ROUND ROBIN"}
+          </text>
+
+          <text x="65" y="96" fill="#10b981" fontSize="9" fontFamily="monospace" textAnchor="middle">
+            ● EVALUATING FLEET
+          </text>
+        </g>
+
+        {/* ---------------- NODE 3A: WORKER A (FAST) ---------------- */}
+        <g transform="translate(560, 20)">
+          <rect
+            width="180"
+            height="70"
+            rx="8"
+            fill="#091426"
+            stroke={isA ? "#10b981" : "#1e293b"}
+            strokeWidth={isA ? "2.5" : "1"}
+            className="transition-all"
+          />
+          <circle cx="18" cy="22" r="5" fill={isA ? "#10b981" : "#64748b"} />
+          <text x="32" y="25" fill="#f8fafc" fontSize="12" fontFamily="monospace" fontWeight="bold">
+            Worker A (Fast)
+          </text>
+          {isA && (
+            <rect x="115" y="12" width="55" height="18" rx="4" fill="#10b981" />
+          )}
+          {isA && (
+            <text x="142" y="25" fill="#022c22" fontSize="9" fontFamily="monospace" fontWeight="bold" textAnchor="middle">
+              OPTIMAL
+            </text>
+          )}
+          <text x="18" y="45" fill="#94a3b8" fontSize="10" fontFamily="monospace">
+            Base Delay: 15ms • Weight: 2x
+          </text>
+          <text x="18" y="60" fill={isA ? "#34d399" : "#64748b"} fontSize="9" fontFamily="monospace">
+            {isA && lastResult ? `Actual Latency: ${lastResult.actual_latency_ms?.toFixed(1)}ms` : "Fastest compute tier"}
+          </text>
+        </g>
+
+        {/* ---------------- NODE 3B: WORKER B (SLOW) ---------------- */}
+        <g transform="translate(560, 95)">
+          <rect
+            width="180"
+            height="70"
+            rx="8"
+            fill="#091426"
+            stroke={isB ? "#f59e0b" : "#1e293b"}
+            strokeWidth={isB ? "2.5" : "1"}
+            className="transition-all"
+          />
+          <circle cx="18" cy="22" r="5" fill={isB ? "#f59e0b" : "#64748b"} />
+          <text x="32" y="25" fill="#f8fafc" fontSize="12" fontFamily="monospace" fontWeight="bold">
+            Worker B (Slow)
+          </text>
+          {isB && (
+            <rect x="115" y="12" width="55" height="18" rx="4" fill="#f59e0b" />
+          )}
+          {isB && (
+            <text x="142" y="25" fill="#451a03" fontSize="9" fontFamily="monospace" fontWeight="bold" textAnchor="middle">
+              SELECTED
+            </text>
+          )}
+          <text x="18" y="45" fill="#94a3b8" fontSize="10" fontFamily="monospace">
+            Base Delay: 60ms • Weight: 1x
+          </text>
+          <text x="18" y="60" fill={isB ? "#fbbf24" : "#64748b"} fontSize="9" fontFamily="monospace">
+            {isB && lastResult ? `Actual Latency: ${lastResult.actual_latency_ms?.toFixed(1)}ms` : "High-latency node"}
+          </text>
+        </g>
+
+        {/* ---------------- NODE 3C: WORKER C (MEDIUM) ---------------- */}
+        <g transform="translate(560, 170)">
+          <rect
+            width="180"
+            height="70"
+            rx="8"
+            fill="#091426"
+            stroke={isC ? "#818cf8" : "#1e293b"}
+            strokeWidth={isC ? "2.5" : "1"}
+            className="transition-all"
+          />
+          <circle cx="18" cy="22" r="5" fill={isC ? "#818cf8" : "#64748b"} />
+          <text x="32" y="25" fill="#f8fafc" fontSize="12" fontFamily="monospace" fontWeight="bold">
+            Worker C (Med)
+          </text>
+          {isC && (
+            <rect x="115" y="12" width="55" height="18" rx="4" fill="#818cf8" />
+          )}
+          {isC && (
+            <text x="142" y="25" fill="#1e1b4b" fontSize="9" fontFamily="monospace" fontWeight="bold" textAnchor="middle">
+              OPTIMAL
+            </text>
+          )}
+          <text x="18" y="45" fill="#94a3b8" fontSize="10" fontFamily="monospace">
+            Base Delay: 30ms • Weight: 1x
+          </text>
+          <text x="18" y="60" fill={isC ? "#a5b4fc" : "#64748b"} fontSize="9" fontFamily="monospace">
+            {isC && lastResult ? `Actual Latency: ${lastResult.actual_latency_ms?.toFixed(1)}ms` : "Balanced secondary node"}
+          </text>
+        </g>
+      </svg>
+    </div>
+  );
+}
+
+// ----------------------------------------------------
 // Benchmark Matrix Component
 // ----------------------------------------------------
 function ExperimentMatrixSection({ experiments }: { experiments: Experiment[] }) {
@@ -1291,7 +1757,7 @@ function ExperimentMatrixSection({ experiments }: { experiments: Experiment[] })
             const isLC = e.policy === "least_connections";
 
             return (
-              <div key={e.id} className="bg-surface border border-border-subtle rounded p-3">
+              <div key={e.id} className="bg-surface border border-border-subtle rounded-xl p-3">
                 <div className="flex justify-between items-center mb-1.5">
                   <div className="flex items-center gap-2">
                     <span
@@ -1325,7 +1791,7 @@ function ExperimentMatrixSection({ experiments }: { experiments: Experiment[] })
       </div>
 
       {/* Right Column: Research Takeaways */}
-      <div className="bg-surface border border-border-subtle rounded-lg p-5 flex flex-col justify-between">
+      <div className="bg-surface border border-border-subtle rounded-xl p-5 flex flex-col justify-between">
         <div>
           <div className="flex items-center gap-2 border-b border-border-subtle pb-3 mb-4">
             <ShieldCheck className="w-4 h-4 text-secondary" />
@@ -1335,22 +1801,22 @@ function ExperimentMatrixSection({ experiments }: { experiments: Experiment[] })
           </div>
 
           <div className="space-y-4 font-mono text-xs text-slate-300">
-            <div className="p-3 bg-surface-high border border-border rounded">
+            <div className="p-3 bg-surface-high border border-border rounded-lg">
               <span className="text-[10px] text-slate-500 uppercase tracking-wider block">
                 Heterogeneous Asymmetry
               </span>
               <div className="text-lg font-bold text-secondary mt-0.5">AI Optimal</div>
-              <p className="text-[11px] text-slate-400 mt-1">
+              <p className="text-[11px] text-slate-400 mt-1 font-sans">
                 Under unequal node delays (15ms vs 60ms), Random Forest latency prediction avoids queue build-up on slow workers.
               </p>
             </div>
 
-            <div className="p-3 bg-surface-high border border-border rounded">
+            <div className="p-3 bg-surface-high border border-border rounded-lg">
               <span className="text-[10px] text-slate-500 uppercase tracking-wider block">
                 Inference Latency Tax
               </span>
               <div className="text-lg font-bold text-amber mt-0.5">~2-5 ms / eval</div>
-              <p className="text-[11px] text-slate-400 mt-1">
+              <p className="text-[11px] text-slate-400 mt-1 font-sans">
                 Under uniform light workloads, Least Connections out-benchmarks AI because tree regression incurs a CPU scoring overhead.
               </p>
             </div>
@@ -1362,7 +1828,7 @@ function ExperimentMatrixSection({ experiments }: { experiments: Experiment[] })
             href={`${api}/api/v1/experiments`}
             target="_blank"
             rel="noreferrer"
-            className="w-full text-center py-2 bg-surface-high hover:bg-surface-bright text-primary border border-border rounded transition-colors"
+            className="w-full text-center py-2 bg-surface-high hover:bg-surface-bright text-primary border border-border rounded-lg transition-colors"
           >
             Raw Experiments API JSON ↗
           </a>
