@@ -8,18 +8,18 @@ type Backend = {
   health_status: string;
   enabled: boolean;
   capacity_weight: number;
-  last_health_at?: string;
+  last_health_at?: string | null;
 };
 
 type Decision = {
   request_id: string;
   policy: string;
-  selected_backend_id?: string;
-  predicted_latency_ms?: number;
-  actual_latency_ms?: number;
-  status_code?: number;
+  selected_backend_id?: string | null;
+  predicted_latency_ms?: number | null;
+  actual_latency_ms?: number | null;
+  status_code?: number | null;
   success: boolean;
-  fallback_reason?: string;
+  fallback_reason?: string | null;
   decided_at: string;
 };
 
@@ -27,13 +27,13 @@ type ExperimentMetric = {
   request_count: number;
   success_count: number;
   error_count: number;
-  throughput_rps: number;
-  error_rate: number;
-  latency_p50_ms?: number;
-  latency_p95_ms?: number;
-  latency_p99_ms?: number;
-  ai_prediction_mae_ms?: number;
-  distribution_json?: Record<string, number>;
+  throughput_rps?: number | null;
+  error_rate?: number | null;
+  latency_p50_ms?: number | null;
+  latency_p95_ms?: number | null;
+  latency_p99_ms?: number | null;
+  ai_prediction_mae_ms?: number | null;
+  distribution_json?: Record<string, number> | null;
 };
 
 type Experiment = {
@@ -44,23 +44,41 @@ type Experiment = {
   repetition: number;
   scenario: string;
   status: string;
-  ended_at?: string;
-  metric?: ExperimentMetric;
+  ended_at?: string | null;
+  metric?: ExperimentMetric | null;
 };
 
 const api = import.meta.env.VITE_API_BASE_URL || "";
 const configuredAdminToken = import.meta.env.VITE_ADMIN_TOKEN || "";
+const TOKEN_STORAGE_KEY = "lb_admin_token";
+
+function getInitialToken(): string {
+  try {
+    const saved = sessionStorage.getItem(TOKEN_STORAGE_KEY);
+    if (saved) return saved;
+  } catch {
+    // sessionStorage not accessible
+  }
+  return configuredAdminToken;
+}
 
 const getHeaders = (adminToken: string): Record<string, string> =>
   adminToken
     ? { "X-Admin-Token": adminToken, "Content-Type": "application/json" }
     : { "Content-Type": "application/json" };
 
-function formatTime(isoString?: string): string {
+function formatTime(isoString?: string | null): string {
   if (!isoString) return "—";
   const date = new Date(isoString);
   if (isNaN(date.getTime())) return "—";
   return date.toLocaleTimeString();
+}
+
+function formatNumber(val?: number | null, decimals = 1, suffix = ""): string {
+  if (val === null || val === undefined || typeof val !== "number" || isNaN(val)) {
+    return "—";
+  }
+  return `${val.toFixed(decimals)}${suffix}`;
 }
 
 function extractErrorMessage(body: any, label: string): string {
@@ -85,9 +103,18 @@ function App() {
   const [initialLoading, setInitialLoading] = useState(true);
   const [isRefreshing, setIsRefreshing] = useState(false);
   const [notice, setNotice] = useState("");
-  const [adminToken, setAdminToken] = useState(configuredAdminToken);
+  const [adminToken, setAdminToken] = useState(getInitialToken);
 
   const isInitialMount = useRef(true);
+
+  const handleTokenChange = (val: string) => {
+    setAdminToken(val);
+    try {
+      sessionStorage.setItem(TOKEN_STORAGE_KEY, val);
+    } catch {
+      // sessionStorage not accessible
+    }
+  };
 
   const refresh = async (silent = false) => {
     if (!silent) setIsRefreshing(true);
@@ -182,7 +209,7 @@ function App() {
   const successful = decisions.filter((d) => d.success).length;
   const withLatency = decisions
     .map((d) => d.actual_latency_ms)
-    .filter((ms): ms is number => typeof ms === "number" && !isNaN(ms))
+    .filter((ms): ms is number => ms !== null && ms !== undefined && typeof ms === "number" && !isNaN(ms))
     .sort((a, b) => a - b);
 
   let p95: number | undefined;
@@ -216,9 +243,8 @@ function App() {
               id="admin-token-input"
               type="password"
               value={adminToken}
-              onChange={(e) => setAdminToken(e.target.value)}
+              onChange={(e) => handleTokenChange(e.target.value)}
               placeholder="Required for admin actions"
-              autoComplete="off"
             />
           </label>
           <label htmlFor="policy-select">
@@ -249,7 +275,7 @@ function App() {
           title="Successful"
           value={`${successful} (${decisions.length ? Math.round((successful / decisions.length) * 100) : 0}%)`}
         />
-        <Card title="P95 latency" value={p95 !== undefined ? `${p95.toFixed(1)} ms` : "—"} />
+        <Card title="P95 latency" value={formatNumber(p95, 1, " ms")} />
         <Card title="Active policy" value={status.policy} />
       </section>
 
@@ -298,8 +324,8 @@ function App() {
                   <td>{formatTime(d.decided_at)}</td>
                   <td><code className="policy-tag">{d.policy}</code></td>
                   <td>{d.selected_backend_id ? d.selected_backend_id.slice(0, 8) : "—"}</td>
-                  <td>{d.predicted_latency_ms !== undefined ? `${d.predicted_latency_ms.toFixed(1)} ms` : "—"}</td>
-                  <td>{d.actual_latency_ms !== undefined ? `${d.actual_latency_ms.toFixed(1)} ms` : "—"}</td>
+                  <td>{formatNumber(d.predicted_latency_ms, 1, " ms")}</td>
+                  <td>{formatNumber(d.actual_latency_ms, 1, " ms")}</td>
                   <td>
                     <span className={`status-pill ${d.success ? "success" : "fail"}`}>
                       {d.status_code || (d.success ? "200" : "500")}
@@ -342,7 +368,7 @@ function ExperimentComparison({ experiments }: { experiments: Experiment[] }) {
   const completed = experiments.filter((e) => e.status === "completed" && e.metric);
   const p95Values = completed
     .map((e) => e.metric?.latency_p95_ms)
-    .filter((val): val is number => typeof val === "number" && !isNaN(val) && val > 0);
+    .filter((val): val is number => val !== null && val !== undefined && typeof val === "number" && !isNaN(val) && val > 0);
   const maxP95 = p95Values.length > 0 ? Math.max(...p95Values) : 1;
 
   return (
@@ -374,7 +400,7 @@ function ExperimentComparison({ experiments }: { experiments: Experiment[] }) {
                   <div className="bar-track">
                     <div className="bar" style={{ width: `${widthPct}%` }} />
                   </div>
-                  <strong>{val !== undefined ? `${val.toFixed(1)} ms` : "—"}</strong>
+                  <strong>{formatNumber(val, 1, " ms")}</strong>
                 </div>
               );
             })}
@@ -394,23 +420,30 @@ function ExperimentComparison({ experiments }: { experiments: Experiment[] }) {
                 </tr>
               </thead>
               <tbody>
-                {completed.map((e) => (
-                  <tr key={e.id}>
-                    <td>
-                      {e.policy} / {e.workload_profile} / r{e.repetition}
-                    </td>
-                    <td><span className="status-pill success">{e.status}</span></td>
-                    <td>{e.metric?.request_count}</td>
-                    <td>{e.metric?.throughput_rps?.toFixed(2)} req/s</td>
-                    <td>{e.metric?.latency_p50_ms !== undefined ? `${e.metric.latency_p50_ms.toFixed(1)} ms` : "—"}</td>
-                    <td>{e.metric?.latency_p95_ms !== undefined ? `${e.metric.latency_p95_ms.toFixed(1)} ms` : "—"}</td>
-                    <td>{((e.metric?.error_rate || 0) * 100).toFixed(1)}%</td>
-                    <td>
-                      <a href={`${api}/api/v1/experiments/${e.id}/export?format=csv`} download>CSV</a> ·{" "}
-                      <a href={`${api}/api/v1/experiments/${e.id}/export?format=json`} download>JSON</a>
-                    </td>
-                  </tr>
-                ))}
+                {completed.map((e) => {
+                  const errorRate = e.metric?.error_rate;
+                  const errorPct = errorRate !== null && errorRate !== undefined && typeof errorRate === "number" && !isNaN(errorRate)
+                    ? `${(errorRate * 100).toFixed(1)}%`
+                    : "—";
+
+                  return (
+                    <tr key={e.id}>
+                      <td>
+                        {e.policy} / {e.workload_profile} / r{e.repetition}
+                      </td>
+                      <td><span className="status-pill success">{e.status}</span></td>
+                      <td>{e.metric?.request_count ?? "—"}</td>
+                      <td>{formatNumber(e.metric?.throughput_rps, 2, " req/s")}</td>
+                      <td>{formatNumber(e.metric?.latency_p50_ms, 1, " ms")}</td>
+                      <td>{formatNumber(e.metric?.latency_p95_ms, 1, " ms")}</td>
+                      <td>{errorPct}</td>
+                      <td>
+                        <a href={`${api}/api/v1/experiments/${e.id}/export?format=csv`} download>CSV</a> ·{" "}
+                        <a href={`${api}/api/v1/experiments/${e.id}/export?format=json`} download>JSON</a>
+                      </td>
+                    </tr>
+                  );
+                })}
               </tbody>
             </table>
           </div>
