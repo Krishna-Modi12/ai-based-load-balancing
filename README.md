@@ -1,307 +1,298 @@
-# AI-Based Load Balancing in Computer Networks
+<div align="center">
 
-[![License: MIT](https://img.shields.io/badge/License-MIT-blue.svg)](LICENSE)
-[![Python 3.11](https://img.shields.io/badge/Python-3.11%2B-blue.svg)](https://www.python.org/)
-[![FastAPI](https://img.shields.io/badge/FastAPI-0.116-green.svg)](https://fastapi.tiangolo.com/)
-[![React 19](https://img.shields.io/badge/React-19.x-blue.svg)](https://react.dev/)
-[![TypeScript](https://img.shields.io/badge/TypeScript-5.x-blue.svg)](https://www.typescriptlang.org/)
-[![PostgreSQL](https://img.shields.io/badge/PostgreSQL-16-blue.svg)](https://www.postgresql.org/)
-[![Tests](https://img.shields.io/badge/Tests-18%20Passed-success.svg)](backend/tests/)
-[![Docker Compose](https://img.shields.io/badge/Docker%20Compose-v2%2B-blue.svg)](deployment/docker-compose.yml)
+# AI-Based Load Balancing
 
-A production-ready, full-stack **Layer-7 HTTP Intelligent Load Balancer and Telemetry Control Plane** designed for modern computer networks. This system combines conventional routing baselines (**Round Robin**, **Least Connections**) with a supervised **Random Forest Latency Predictor** to route traffic dynamically across heterogeneous application backends based on live real-time server telemetry.
+### An observable Layer-7 HTTP reverse proxy with conventional and AI-assisted routing
 
----
+[![Release](https://img.shields.io/badge/release-v1.0.7-0f766e?style=for-the-badge)](docs/FINAL_RELEASE_NOTES.md)
+[![Backend tests](https://img.shields.io/badge/backend%20tests-25%20passed-16a34a?style=for-the-badge)](backend/tests/)
+[![Python](https://img.shields.io/badge/Python-3.11%2B-3776AB?style=for-the-badge&logo=python&logoColor=white)](https://www.python.org/)
+[![FastAPI](https://img.shields.io/badge/FastAPI-0.116-009688?style=for-the-badge&logo=fastapi&logoColor=white)](https://fastapi.tiangolo.com/)
+[![React](https://img.shields.io/badge/React-19-61DAFB?style=for-the-badge&logo=react&logoColor=111827)](https://react.dev/)
+[![PostgreSQL](https://img.shields.io/badge/PostgreSQL-16-4169E1?style=for-the-badge&logo=postgresql&logoColor=white)](https://www.postgresql.org/)
 
-## 📑 Table of Contents
-- [Project Overview](#-project-overview)
-- [System Architecture](#-system-architecture)
-- [Key Features](#-key-features)
-- [Routing Algorithms & AI Methodology](#-routing-algorithms--ai-methodology)
-- [Benchmark & Empirical Evaluation](#-benchmark--empirical-evaluation)
-- [Tech Stack](#-tech-stack)
-- [Quick Start Guide](#-quick-start-guide)
-  - [Docker Compose Deployment](#1-docker-compose-deployment-recommended)
-  - [Local Development Setup](#2-local-development-setup)
-- [API Endpoints Reference](#-api-endpoints-reference)
-- [Testing & Quality Assurance](#-testing--quality-assurance)
-- [Documentation Index](#-documentation-index)
-- [Viva & Defense Cheat Sheet](#-viva--defense-cheat-sheet)
-- [License](#-license)
+**A full-stack Computer Networks project for comparing Round Robin, Least Connections, and supervised Random Forest latency prediction under real HTTP traffic.**
 
----
+[Quick start](#quick-start) · [Architecture](#architecture) · [Live demo flow](#live-demo-flow) · [Research results](#research-results) · [Documentation](#documentation)
 
-## 🌟 Project Overview
+</div>
 
-Traditional load-balancing algorithms operate blindly with respect to application-level performance:
-- **Round Robin (RR)** naively cycles through backends regardless of whether one server is choking on memory or compute.
-- **Least Connections (LC)** monitors open connections but treats lightweight static requests and heavy compute-bound tasks identically.
+> **Project status:** Verified academic release candidate. This is a tested software prototype, not a production security certification or a claim that AI routing is always faster.
 
-**AI-Based Load Balancing** solves this by observing live system telemetry (CPU utilization, memory usage, in-flight requests, network RTT, EWMA latency, and error rate), applying a supervised Scikit-Learn `RandomForestRegressor` to estimate each candidate server's response time in milliseconds, and routing traffic to the fastest eligible backend.
+## What this project does
 
-### Core Objectives
-1. **Real-world Layer-7 Reverse Proxy:** High-throughput HTTP forwarding with connection pooling, correlation IDs, and bounded timeouts.
-2. **Deterministic Baseline vs. AI Comparison:** Side-by-side evaluation of Round Robin, Least Connections, and Machine Learning latency prediction under identical workloads.
-3. **Resilient Failure Handling:** Automatic failover, stale telemetry exclusion, out-of-bounds prediction clamping, and safe degradation to Least Connections.
-4. **Persistent Auditing:** Every single decision, feature vector, predicted vs. actual latency, and HTTP status code is saved to PostgreSQL for reproducible analysis.
+The system sits between clients and a registered cluster of HTTP workers. For every request, the FastAPI control plane:
 
----
+1. Checks which workers are enabled, healthy, and have fresh telemetry.
+2. Selects a worker using the active routing policy.
+3. Forwards the request with bounded timeouts and a correlation ID.
+4. Measures the result and stores the routing decision in PostgreSQL.
+5. Exposes health, telemetry, metrics, model, and experiment data through an API and React dashboard.
 
-## 🏗 System Architecture
+The AI policy is a supervised `RandomForestRegressor`. It predicts expected backend latency from CPU, memory, active requests, EWMA latency, network RTT, error rate, capacity, and request class. If the model is missing, invalid, stale, or unsafe, routing falls back to Least Connections.
 
-```
-                            +----------------------------------+
-                            |     Client / Ingress Traffic     |
-                            +----------------------------------+
-                                             |
-                                    HTTP Requests (L7)
-                                             v
-                      +-----------------------------------------------+
-                      |     FastAPI Reverse Proxy & Load Balancer     |
-                      |                 (Port 8000)                   |
-                      +-----------------------------------------------+
-                                      |               |
-                      Health Probing & Telemetry      | Request Forwarding
-                                      v               v
-                +-----------------------------------------------------------+
-                |                    Routing Decision Engine                |
-                |  +--------------------+-------------------+------------+  |
-                |  | Round Robin Policy | Least Connections | AI Latency |  |
-                |  +--------------------+-------------------+------------+  |
-                +-----------------------------------------------------------+
-                                             |  (Scored via Scikit-Learn
-                                             |   Random Forest Regressor)
-                                             v
-                     +---------------------------------------------+
-                     |         Backend Worker Cluster (HTTP)       |
-                     |  +-----------------+---------------------+  |
-                     |  | Worker A (Fast) | 15ms Base / Cap=2.0 |  |
-                     |  | Worker B (Slow) | 60ms Base / Cap=1.0 |  |
-                     |  | Worker C (Med)  | 30ms Base / Cap=1.0 |  |
-                     |  +-----------------+---------------------+  |
-                     +---------------------------------------------+
-                                      |               |
-                           Response Latency    Health Metrics
-                                      v               v
-                +-----------------------------------------------------------+
-                |             PostgreSQL Persistence Layer                  |
-                |   - routing_decisions    - telemetry_samples              |
-                |   - model_versions       - experiment_runs & metrics      |
-                +-----------------------------------------------------------+
-                                             ^
-                                             | REST API / Metrics
-                                             v
-                +-----------------------------------------------------------+
-                |         React 19 + TypeScript + Tailwind Dashboard        |
-                |                 (Nginx Reverse Proxy: 5173)               |
-                +-----------------------------------------------------------+
+## Architecture
+
+```text
+ Browser / HTTP client
+          |
+          v
+  React dashboard :5173
+       Nginx proxy
+          |
+          v
+  FastAPI reverse proxy :8000
+          |
+    Routing engine
+   /       |        \
+ RR       LC       AI latency
+   \       |        /
+    Registered worker cluster
+   worker-a  worker-b  worker-c
+          |
+          v
+      PostgreSQL
+ decisions | telemetry | models | experiments
 ```
 
----
+### Included services
 
-## ⚡ Key Features
+| Service | Role | Default |
+|---|---|---|
+| `api` | FastAPI reverse proxy and control plane | `localhost:8000` |
+| `frontend` | React dashboard served by Nginx | `localhost:5173` |
+| `worker-a` | Fast simulated backend | 15 ms base delay |
+| `worker-b` | Slow simulated backend | 60 ms base delay |
+| `worker-c` | Medium simulated backend | 30 ms base delay |
+| `db` | PostgreSQL persistence | Internal Compose network |
 
-- **Dynamic L7 Reverse Proxy:** Non-blocking async proxying built with `HTTPX` and `FastAPI`, featuring correlation tracking (`X-Request-ID`).
-- **Tri-Policy Routing Engine:**
-  - `round_robin`: Classical deterministic rotation.
-  - `least_connections`: Load-aware selection with deterministic tie-breaking.
-  - `ai_latency`: Random Forest regression model scoring candidate nodes.
-- **Fail-Safe Circuit Breaker:**
-  - `MODEL_UNAVAILABLE`: Graceful fallback if model artifact is missing.
-  - `MODEL_INFERENCE_FAILED`: Catches invalid outputs (NaN, Inf, or negative times).
-  - `STALE_TELEMETRY`: Excludes nodes with metrics older than 30 seconds.
-- **Explainable Machine Learning:**
-  - Model: Scikit-learn `RandomForestRegressor(n_estimators=100)`.
-  - Feature Schema v1: `[cpu_percent, memory_percent, active_requests, latency_ewma_ms, network_rtt_ms, error_rate, capacity_weight, request_class]`.
-  - Auditable model artifacts stored with explicit validation metrics (MAE & RMSE).
-- **Comprehensive React 19 Operator Dashboard:**
-  - Real-time system health, telemetry charts, policy switcher, and backend controls.
-  - Live inspection of routing decisions showing predicted vs. actual latency.
-  - Direct model training and experiment export controls.
-- **Reproducible Performance Experiments:**
-  - Integrated Locust load testing framework.
-  - Automated CSV and JSON metric export per experiment run.
+## Routing policies
 
----
+### Round Robin
 
-## 🔬 Routing Algorithms & AI Methodology
+Cycles through eligible workers in order. It is deterministic, inexpensive, and useful as a conventional baseline, but does not account for worker speed or current load.
 
-### Algorithmic Breakdown
-1. **Round Robin (Baseline):**
-   $$b^* = B_{\text{healthy}}[c \pmod n], \quad c \leftarrow c + 1$$
-2. **Least Connections (Baseline):**
-   $$b^* = \arg\min_{b \in B_{\text{healthy}}} \left(\text{inflight}(b), \text{name}(b)\right)$$
-3. **AI Latency Prediction (Proposed):**
-   Evaluates feature vector $\mathbf{x}_b$ against trained ensemble $f_\theta$:
-   $$b^* = \arg\min_{b \in B_{\text{healthy}}} f_\theta(\mathbf{x}_b)$$
+### Least Connections
 
-### Calibration & Training Discipline
-- Requires **at least 20 real recorded decisions** under calibration traffic before model training can be triggered.
-- Uses an 80/20 train/validation split.
-- Rejects ungrounded or synthetic accuracy claims; reports actual MAE and RMSE in milliseconds.
+Chooses the eligible worker with the fewest active requests. It is a strong load-aware baseline for heterogeneous workers without requiring model inference.
 
----
+### AI latency prediction
 
-## 📊 Benchmark & Empirical Evaluation
+Scores each eligible worker with a trained Random Forest model and chooses the lowest safe predicted latency. Every AI decision records the feature vector, model version, prediction, actual latency, and any fallback reason.
 
-Rigorous benchmarking was executed across 36 controlled Locust experiment runs across 4 distinct operational profiles:
+Safety behavior is explicit:
 
-| Workload Scenario | Policy | Avg Throughput (req/s) | Median Latency (P50 ms) | Tail Latency (P95 ms) | Load Distribution CV |
-|---|---|---|---|---|---|
-| **Uniform Workload** | Round Robin | **98.4** | 22.1 | 35.8 | 0.04 |
-| | Least Connections | 97.8 | **21.4** | **34.2** | **0.02** |
-| | AI Latency | 84.2 | 26.8 | 48.6 | 0.12 |
-| **Heterogeneous Workers** | Round Robin | 64.1 | 42.5 | 88.2 | 0.38 |
-| | Least Connections | **79.6** | **28.3** | **52.1** | **0.18** |
-| | AI Latency | 74.5 | 31.2 | 58.4 | 0.22 |
-| **Bursty Traffic Spikes** | Round Robin | 71.2 | 39.8 | 94.6 | 0.41 |
-| | Least Connections | **88.4** | **25.6** | **49.8** | **0.15** |
-| | AI Latency | 81.3 | 29.4 | 56.1 | 0.19 |
-| **Mixed Request Costs** | Round Robin | 58.6 | 54.2 | 112.4 | 0.45 |
-| | Least Connections | 72.4 | 36.5 | 74.8 | 0.24 |
-| | AI Latency | **76.1** | **33.8** | **68.2** | **0.20** |
+- Missing model -> `MODEL_UNAVAILABLE`
+- Invalid inference -> `MODEL_INFERENCE_FAILED`
+- Stale or unhealthy worker -> excluded
+- Unsafe prediction -> safe fallback to Least Connections
+- Upstream timeout or failure -> structured error with request ID
 
-> **Academic Conclusion:** While AI provides superior routing decisions in heterogeneous or mixed-cost environments, runtime model evaluation adds a ~2-5ms CPU inference tax. For uniform light workloads, Least Connections remains the optimal engineering choice.
+## Quick start
 
----
+### Requirements
 
-## 💻 Tech Stack
+- Docker Desktop with Docker Compose v2
+- PowerShell on Windows, or an equivalent shell
+- At least 4 GB of available Docker memory
 
-- **Backend & Control Plane:** Python 3.11, FastAPI, Pydantic v2, HTTPX, Uvicorn
-- **Database & Migrations:** PostgreSQL 16, SQLAlchemy 2.0 ORM, Alembic
-- **Machine Learning:** Scikit-Learn 1.7+, Joblib, NumPy
-- **Frontend Dashboard:** React 19, TypeScript, Vite, Tailwind CSS, Recharts
-- **Web Server / Proxy:** Nginx 1.27 Alpine (SPA serving + API reverse proxy)
-- **Deployment & Testing:** Docker Compose, Pytest, Locust, GitHub Actions
+### Start the complete stack
 
----
+```powershell
+cd "C:\Users\krish\OneDrive\Desktop\CN Project\ai_load_balancer_starter"
+Copy-Item .env.example .env -ErrorAction SilentlyContinue
+# Edit .env and set ADMIN_TOKEN and POSTGRES_PASSWORD.
+docker compose --env-file .env -f deployment\docker-compose.yml up --build -d
+docker compose --env-file .env -f deployment\docker-compose.yml ps
+```
 
-## 🚀 Quick Start Guide
+Open:
 
-### 1. Docker Compose Deployment (Recommended)
+- Dashboard: <http://localhost:5173>
+- API: <http://localhost:8000>
+- Swagger UI: <http://localhost:8000/docs>
 
-1. **Clone the repository:**
-   ```bash
-   git clone https://github.com/Krishna-Modi12/ai-based-load-balancing.git
-   cd ai-based-load-balancing
-   ```
+Check the services:
 
-2. **Configure environment variables:**
-   ```bash
-   cp .env.example .env
-   # Edit .env and set your ADMIN_TOKEN and POSTGRES_PASSWORD
-   ```
+```powershell
+Invoke-RestMethod http://localhost:8000/health/live
+Invoke-RestMethod http://localhost:8000/health/ready
+```
 
-3. **Start all services with Docker Compose:**
-   ```bash
-   docker compose --env-file .env -f deployment/docker-compose.yml up --build -d
-   ```
+Expected responses:
 
-4. **Verify running services:**
-   - **Operator Dashboard:** [http://localhost:5173](http://localhost:5173)
-   - **FastAPI Control Plane:** [http://localhost:8000](http://localhost:8000)
-   - **Swagger API Documentation:** [http://localhost:8000/docs](http://localhost:8000/docs)
-   - **PostgreSQL Database:** `localhost:5432`
+```json
+{"status":"alive"}
+{"status":"ready"}
+```
 
----
+The dashboard accepts the `ADMIN_TOKEN` value from `.env` for operator actions. The token is held in browser memory only.
 
-### 2. Local Development Setup
+### Stop without deleting database data
 
-#### Backend Setup
+```powershell
+docker compose --env-file .env -f deployment\docker-compose.yml stop
+```
+
+Do not use `docker compose down -v` unless you intentionally want to delete the local PostgreSQL volume and its records.
+
+## Live demo flow
+
+Set the operator token in PowerShell:
+
+```powershell
+$env:ADMIN_TOKEN="your-local-admin-token"
+$h=@{"X-Admin-Token"=$env:ADMIN_TOKEN}
+```
+
+Run a health check:
+
+```powershell
+Invoke-RestMethod `
+  http://localhost:8000/api/v1/backends/health-check-all `
+  -Method Post -Headers $h
+```
+
+Select Round Robin and route requests:
+
+```powershell
+Invoke-RestMethod http://localhost:8000/api/v1/policies `
+  -Method Post -Headers $h -ContentType application/json `
+  -Body '{"policy":"round_robin"}'
+
+1..6 | ForEach-Object {
+  Invoke-RestMethod "http://localhost:8000/api/v1/route?request_class=normal" |
+    Select-Object backend,policy,actual_latency_ms,fallback_reason
+}
+```
+
+Try Least Connections or AI routing by changing the policy value:
+
+```powershell
+{"policy":"least_connections"}
+{"policy":"ai_latency"}
+```
+
+For AI routing, inspect `predicted_latency_ms`, `ai_inference_latency_ms`, and `fallback_reason`. A missing model is expected to fall back safely until calibration data has been collected and a model artifact has been provisioned.
+
+To demonstrate failover, disable a registered worker from the dashboard or API. The router excludes it, continues using eligible workers, and records the resulting decisions.
+
+## API highlights
+
+| Endpoint | Purpose | Auth |
+|---|---|---|
+| `GET /health/live` | Process liveness | No |
+| `GET /health/ready` | Database readiness | No |
+| `GET /api/v1/system/status` | Active policy and model status | No |
+| `GET /api/v1/route` | Route one HTTP request | No |
+| `GET /api/v1/backends` | List registered workers | No |
+| `POST /api/v1/backends/health-check-all` | Probe workers | Admin |
+| `POST /api/v1/policies` | Change active policy | Admin |
+| `GET /api/v1/decisions` | Read routing history | No |
+| `GET /api/v1/metrics/summary` | Aggregate metrics | No |
+| `GET /api/v1/metrics/timeseries` | Bucketed metrics | No |
+| `GET /api/v1/models/status` | Model readiness | No |
+| `POST /api/v1/models/train` | Train a model | Admin |
+| `POST /api/v1/experiments` | Create an experiment | Admin |
+
+Mutating endpoints use:
+
+```http
+X-Admin-Token: your-local-admin-token
+```
+
+## Observability and persistence
+
+PostgreSQL stores:
+
+- Registered backend nodes and health state
+- Telemetry samples
+- Routing decisions and correlation IDs
+- Predicted versus actual latency
+- Model versions and validation metadata
+- Experiment configurations and metrics
+
+Useful requests:
+
+```powershell
+Invoke-RestMethod "http://localhost:8000/api/v1/metrics/summary?window=5m"
+Invoke-RestMethod "http://localhost:8000/api/v1/metrics/timeseries?metric=p95_latency&window=15m&step=10s"
+Invoke-RestMethod "http://localhost:8000/api/v1/decisions?limit=20"
+```
+
+## Research results
+
+The project includes a preserved 36-run evaluation across uniform, heterogeneous, bursty, and mixed-cost workloads. The measured result is intentionally reported honestly:
+
+- Round Robin is simple and predictable.
+- Least Connections is a strong general-purpose baseline.
+- AI routing can adapt to telemetry, but inference adds overhead.
+- AI was not universally faster in the measured workload.
+
+Read the evidence:
+
+- [`docs/phase-7-benchmark-results.md`](docs/phase-7-benchmark-results.md)
+- [`docs/phase-8-analysis.md`](docs/phase-8-analysis.md)
+- [`docs/phase-8-failure-mode-results.md`](docs/phase-8-failure-mode-results.md)
+
+## Validation
+
+Backend tests:
+
 ```powershell
 cd backend
-python -m venv .venv
-.\.venv\Scripts\Activate.ps1
-pip install -r requirements-dev.txt
-$env:PYTHONPATH = (Get-Location).Path
-pytest -v
+python -m pytest -q
 ```
 
-#### Frontend Setup
+Frontend build:
+
 ```powershell
 cd frontend
-npm install
-npm run dev
+npm ci --ignore-scripts
+npm run build
 ```
 
----
+Compose validation:
 
-## 📡 API Endpoints Reference
-
-| Method | Endpoint | Description | Auth Required |
-|---|---|---|:---:|
-| `GET` | `/health/live` | Container liveness check | No |
-| `GET` | `/health/ready` | Database readiness check | No |
-| `GET` | `/api/v1/system/status` | Active policy & model readiness | No |
-| `GET` | `/api/v1/route` | Main proxy route (`?request_class=light\|normal\|heavy`) | No |
-| `GET` | `/api/v1/backends` | List all registered backend workers | No |
-| `POST` | `/api/v1/backends` | Register a new backend node | **Yes** |
-| `PATCH` | `/api/v1/backends/{id}` | Update worker weight or enable/disable | **Yes** |
-| `POST` | `/api/v1/backends/health-check-all` | Trigger health & telemetry poll | **Yes** |
-| `GET` | `/api/v1/decisions` | Query recent persisted routing decisions | No |
-| `POST` | `/api/v1/policies` | Switch routing policy (`round_robin\|least_connections\|ai_latency`) | **Yes** |
-| `GET` | `/api/v1/models/status` | Current active model version & schema | No |
-| `POST` | `/api/v1/models/train` | Trigger model training on calibration samples | **Yes** |
-| `GET` | `/api/v1/experiments` | List completed benchmark experiments | No |
-| `POST` | `/api/v1/experiments` | Launch a controlled workload run | **Yes** |
-| `GET` | `/api/v1/experiments/{id}/export` | Export raw metrics (`?format=csv\|json`) | No |
-
----
-
-## 🧪 Testing & Quality Assurance
-
-The project enforces rigorous automated testing covering unit, integration, persistence, and failure scenarios.
-
-Run the test suite locally:
 ```powershell
-cd backend
-pytest -v
+docker compose --env-file .env -f deployment\docker-compose.yml config --quiet
 ```
 
-**All 18 automated tests passing:**
-- Proxy routing determinism (Round Robin cyclic ordering)
-- Least Connections tie-breaking
-- Safe AI fallback when model is missing or corrupt
-- Automatic node exclusion upon stale telemetry (>30s)
-- Automatic exclusion of disabled nodes
-- HTTP error (502) and timeout mappings
-- Model artifact training & schema verification
-- Admin token authentication checks
-- Experiment matrix generation & CSV/JSON export
+## Project layout
 
----
+```text
+backend/       FastAPI application, routing engine, ML and experiments
+db/            SQLAlchemy models and Alembic migrations
+deployment/    Docker Compose and service configuration
+frontend/      React, TypeScript, Vite and Nginx dashboard
+workers/       Simulated HTTP backend workers
+load_testing/  Locust workload definitions and experiment helpers
+ml/            Model artifacts and training-related files
+docs/          Architecture, audit, benchmark and academic documentation
+```
 
-## 📚 Documentation Index
+## Documentation
 
-Comprehensive documentation is available in the [`docs/`](docs/) directory:
+- [Complete project documentation](docs/PROJECT_DOCUMENTATION.md)
+- [Demonstration runbook](docs/DEMO_RUNBOOK.md)
+- [Final release notes](docs/FINAL_RELEASE_NOTES.md)
+- [Final release checklist](docs/FINAL_RELEASE_CHECKLIST.md)
+- [Full project audit](docs/final-audit/FINAL_PROJECT_AUDIT_REPORT.md)
+- [Academic submission checklist](docs/ACADEMIC_SUBMISSION_CHECKLIST.md)
+- [Release manifest](docs/RELEASE_MANIFEST.md)
 
-- 📖 [Master Technical Documentation](docs/PROJECT_DOCUMENTATION.md) — Complete end-to-end reference manual
-- 📋 [Software Requirements Specification (SRS)](docs/02-srs.md)
-- 🏛 [System Architecture & Data Flow](docs/03-architecture.md)
-- 🗄 [Database Design & Schema](docs/04-database-design.md)
-- 🔌 [API Contract & Specifications](docs/05-api-contract.md)
-- 🤖 [ML Methodology & Training Guide](docs/06-ml-methodology.md)
-- 🧪 [Testing & Evaluation Plan](docs/07-test-and-evaluation.md)
-- 🔒 [Security & Risk Register](docs/08-security-and-risk.md)
-- 📊 [Phase 7 Benchmark Results](docs/phase-7-benchmark-results.md)
-- 📈 [Phase 8 Research Analysis](docs/phase-8-analysis.md)
-- 🎓 [Viva Defense Questions & Answers](docs/VIVA_QUESTIONS_AND_ANSWERS.md)
-- 🕹 [Demo Runbook](docs/DEMO_RUNBOOK.md)
-- 📜 [Release Manifest](docs/RELEASE_MANIFEST.md)
+## Known limitations
 
----
+This release is intended for controlled local and academic use. Before an untrusted or public deployment, address:
 
-## 🎓 Viva & Defense Cheat Sheet
+- Authentication for experiment read/export endpoints
+- Allowlisting experiment target URLs
+- Rate limiting and resource quotas
+- Scheduled health checks and circuit breaking
+- Graceful shutdown of in-flight requests
+- Model freshness and clean model provisioning
+- Multi-process routing-policy coordination
 
-| Question | Core Technical Answer |
-|---|---|
-| **Why Layer-7 instead of Layer-4?** | Layer-7 understands application-level HTTP request characteristics, status codes, and execution duration. Layer-4 (TCP/IP) only sees raw packet flows and port numbers. |
-| **Why Random Forest over Reinforcement Learning?** | Tabular telemetry with small sample size suits tree ensembles. RL requires massive online exploration, risks destabilizing production traffic, and has unstable reward convergence. |
-| **Why did AI not outperform on uniform load?** | Scikit-learn inference adds 2-5ms computation latency per request. On uniform fast workers (15-20ms), this inference overhead constitutes a 15-25% tax with no asymmetry to exploit. |
-| **What happens if a backend crashes?** | Health probes mark the node `unhealthy`, and it is immediately excluded from the candidate pool before routing occurs. If an in-flight request fails, HTTP 502 is mapped and recorded with a correlation ID. |
+## License
 
----
-
-## 📄 License
-
-This project is licensed under the **MIT License** — see the [LICENSE](LICENSE) file for details.
+This project is released under the [MIT License](LICENSE).
