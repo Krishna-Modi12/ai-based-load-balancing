@@ -39,12 +39,12 @@ Status: **executing**. This plan converts the existing isolated evidence into ru
 Copy-Item .env.example .env -ErrorAction SilentlyContinue
 # Set ADMIN_TOKEN and POSTGRES_PASSWORD in .env.
 docker info
-docker compose -f deployment/docker-compose.yml config --quiet
+docker compose --env-file .env -f deployment/docker-compose.yml config --quiet
 $env:COMPOSE_PARALLEL_LIMIT='1'
-docker compose -f deployment/docker-compose.yml build
-docker compose -f deployment/docker-compose.yml up -d
-docker compose -f deployment/docker-compose.yml ps
-docker compose -f deployment/docker-compose.yml logs --tail=100
+docker compose --env-file .env -f deployment/docker-compose.yml build
+docker compose --env-file .env -f deployment/docker-compose.yml up -d
+docker compose --env-file .env -f deployment/docker-compose.yml ps
+docker compose --env-file .env -f deployment/docker-compose.yml logs --tail=100
 ```
 
 Then use actual API requests with the `.env` admin token, query decisions, run `docker compose exec api alembic current`, restart only `api`, and rerun the relevant requests. Run Phase 7 only after all applicable Phase 6 gates are evidenced.

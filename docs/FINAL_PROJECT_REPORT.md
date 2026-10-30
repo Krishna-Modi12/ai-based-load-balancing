@@ -210,7 +210,7 @@ or SDN extension. Any such claim requires a new controlled benchmark.
 ```powershell
 Copy-Item .env.example .env
 # Set local ADMIN_TOKEN and POSTGRES_PASSWORD in .env.
-docker compose -f deployment\docker-compose.yml up --build
+docker compose --env-file .env -f deployment\docker-compose.yml up --build
 $env:PYTHONPATH=(Resolve-Path .\backend).Path
 python -m app.experiment_cli --matrix --duration 30 --warmup 5 --concurrency 4 --repetitions 3 --wait 2
 python -m pytest -q .\backend\tests

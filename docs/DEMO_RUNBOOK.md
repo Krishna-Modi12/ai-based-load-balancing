@@ -14,7 +14,7 @@
 ## 1. Start and check the stack
 
 ```powershell
-docker compose -f deployment\docker-compose.yml up --build -d
+docker compose --env-file .env -f deployment\docker-compose.yml up --build -d
 docker compose -f deployment\docker-compose.yml ps
 Invoke-RestMethod http://localhost:8000/health/live
 Invoke-RestMethod http://localhost:8000/health/ready
@@ -105,7 +105,7 @@ npm --prefix .\frontend run build
 
 ## Troubleshooting and cleanup
 
-* API unavailable: `docker compose -f deployment\docker-compose.yml logs api`.
+* API unavailable: `docker compose --env-file .env -f deployment\docker-compose.yml logs api`.
 * Database not ready: wait for `deployment-db-1` to become healthy; do not
   remove the named volume.
 * Disposable clean database (destroys only this Compose project's local
@@ -114,7 +114,7 @@ npm --prefix .\frontend run build
 ```powershell
 docker compose -f deployment\docker-compose.yml down
 docker volume rm deployment_postgres_data
-docker compose -f deployment\docker-compose.yml up --build -d
+docker compose --env-file .env -f deployment\docker-compose.yml up --build -d
 ```
 
   Confirm the volume name with `docker volume ls` before removal. For normal

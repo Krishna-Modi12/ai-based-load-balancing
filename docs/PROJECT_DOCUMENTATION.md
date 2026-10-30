@@ -217,7 +217,7 @@ pytest -v
 cd ai_load_balancer_starter
 Copy-Item .env.example .env
 # Edit .env and supply a secure ADMIN_TOKEN
-docker compose -f deployment/docker-compose.yml up --build -d
+docker compose --env-file .env -f deployment/docker-compose.yml up --build -d
 ```
 Access the services:
 - **Web Dashboard:** [http://localhost:5173](http://localhost:5173)
@@ -257,4 +257,3 @@ npm run dev
 
 **Q4: How does the system handle an AI model failure or network partitioning?**  
 *Answer:* The routing engine implements an automatic fallback circuit breaker. If the model artifact cannot be found, if inference times out, if predictions contain non-finite numbers (NaN/Inf), or if backend telemetry becomes stale, the system automatically falls back to Least Connections routing and logs the exact fallback reason in the PostgreSQL audit trail.
-

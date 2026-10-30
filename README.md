@@ -194,7 +194,7 @@ Rigorous benchmarking was executed across 36 controlled Locust experiment runs a
 
 3. **Start all services with Docker Compose:**
    ```bash
-   docker compose -f deployment/docker-compose.yml up --build -d
+   docker compose --env-file .env -f deployment/docker-compose.yml up --build -d
    ```
 
 4. **Verify running services:**
