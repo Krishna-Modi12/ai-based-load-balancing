@@ -5,7 +5,7 @@
 
 ## What is verified
 
-- Backend test suite: **18 passed** (`backend/tests`).
+- Backend test suite: **25 passed** (`backend/tests`).
 - Frontend production build: **passed**.
 - Docker Compose configuration: **valid**.
 - Release tags `v1.0.0` and `v1.0.1`: present.
@@ -16,19 +16,18 @@
 ## Partial or blocked areas
 
 - The initial Compose smoke start was blocked by the existing PostgreSQL volume password mismatch (`password authentication failed for user "loadbalancer"`). Phase 11 subsequently used the configured local credentials and independently verified migrations, routing, record creation, and persistence across API restart without deleting data.
-- Browser verification was not performed: Playwright, Cypress, Selenium, and an equivalent configured browser runner were unavailable.
-- Word and PowerPoint visual inspection remains manual and pending.
-- The frontend now has basic policy, demo, health, backend, model, and experiment controls, but browser execution remains unverified.
+- Browser verification passed with Python Playwright against the live frontend, including policy selection, demo request, health check, experiment creation, model-action error handling, and backend disable/enable recovery.
+- Word and PowerPoint visual inspection remains manual and pending; no office renderer was available.
+- The frontend controls are browser-verified, while broader visual/accessibility coverage remains untested.
 - Most documented API routes are now present; advanced aggregation and model lifecycle semantics still need hardening.
 - Experiment scenario names for `missing_model`, `timeout`, and `stale_telemetry` are accepted, but the runner does not fully inject all of those conditions itself.
-- Model artifact reproducibility is partial because artifacts are excluded from the release archive and a clean-archive rebuild was not performed.
+- Model artifact reproducibility remains partial because artifacts are excluded from the release archive; clean archive Compose startup and routing passed, but model provisioning was not run in that disposable stack.
 
 ## Highest-priority actions
 
-1. Document and test clean PostgreSQL-volume initialization and credential rotation.
-2. Either implement runner-owned failure injection or rename/document those scenarios as operator-injected.
-3. Replace process-global policy state with controlled persistent/application configuration.
-4. Reconcile the API contract and standardize semantic error envelopes with request IDs.
-5. Add browser tests and complete clean-volume/failure-scenario smoke tests.
+1. Complete manual Word/PowerPoint inspection and academic placeholder replacement.
+2. Add multi-process concurrency verification for persisted policy state.
+3. Implement runner-owned missing-model and stale-telemetry injection, or keep them explicitly operator-injected.
+4. Provision/train the model in a clean archive checkout and record the artifact/version.
 
 The project’s central research conclusion remains defensible when scoped to the recorded local workload: AI routing underperformed Round Robin and Least Connections, demonstrating that added model complexity does not automatically improve observed load-balancing performance.

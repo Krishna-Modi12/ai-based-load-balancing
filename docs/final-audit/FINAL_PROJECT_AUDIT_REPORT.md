@@ -9,27 +9,27 @@
 | Backend core and proxy | 93% |
 | Conventional routing | 95% |
 | ML routing and fallback | 82% |
-| Database and migrations | 86% |
+| Database and migrations | 92% |
 | Experiments and research evidence | 82% |
-| Reliability/failure handling | 75% |
-| Frontend | 75% |
+| Reliability/failure handling | 80% |
+| Frontend | 86% |
 | Documentation | 84% |
-| Release/reproducibility | 76% |
-| Overall submission readiness | 82% |
+| Release/reproducibility | 84% |
+| Overall submission readiness | 87% |
 
 These percentages are reasoned audit estimates, not test scores.
 
 ## Strengths
 
-The project has a real Layer-7 proxy, registered-backend routing, conventional baselines, a validated Random Forest path with safe fallback, persistence, experiment exports, failure handling, an honest negative research result, and a substantial academic package. The 17-test backend suite and frontend build provide meaningful automated evidence.
+The project has a real Layer-7 proxy, registered-backend routing, conventional baselines, a validated Random Forest path with safe fallback, persistence, experiment exports, failure handling, an honest negative research result, and a substantial academic package. The 25-test backend suite, frontend build, live Playwright run, and clean-install smoke test provide meaningful automated evidence.
 
 ## Blocking or high-priority issues
 
-The PostgreSQL API startup, health checks, migrations, routing, record creation, and persistence across API restart were independently verified without deleting the existing volume. The frontend now has basic policy, demo, health, backend, model, and experiment controls, but browser validation remains unavailable. Failure-scenario automation is incomplete, global policy state can corrupt concurrent experiment semantics, the default development token remains weak, and manual Word/PPT inspection remains blocked.
+The PostgreSQL API startup, health checks, migrations, routing, record creation, and persistence across API restart were independently verified without deleting the existing volume. An isolated clean archive installation also initialized a separate PostgreSQL volume and passed service, frontend, worker, and routing smoke checks. Playwright exercised the live dashboard controls. Failure-scenario automation remains partial, multi-process policy concurrency remains untested, and manual Word/PPT inspection remains blocked.
 
 ## Phase 11 closure
 
-Of 12 tracked findings, 2 are PASS (API contract and release consistency), 4 are PARTIAL (PostgreSQL clean-volume reproducibility, frontend/browser coverage, token policy, and model-load testing), 1 is BLOCKED by unavailable browser/office tooling, and the remaining reliability, global-state, failure-injection, and documentation reconciliation items remain OPEN or PARTIAL. No benchmark records, tags, or existing database volume were deleted.
+Of 12 tracked findings, 5 are PASS (PostgreSQL/clean install, browser controls, frontend controls, API contract, release consistency), 4 are PARTIAL (policy concurrency, failure injection, documentation reconciliation, and model clean-checkout provisioning), and 1 is BLOCKED by unavailable office tooling/required manual academic completion. No benchmark records, tags, or existing database volume were deleted.
 
 ## Final recommendation
 

@@ -4,7 +4,7 @@
 
 | Check | Result | Classification |
 |---|---|---|
-| Backend automated suite | 18 passed | Verified; SQLite/in-process |
+| Backend automated suite | 25 passed | Verified; SQLite/in-process |
 | Frontend production build | Passed | Verified |
 | Docker Compose config | Passed | Syntax/configuration |
 | Nginx syntax | Passed historically | Container check |
