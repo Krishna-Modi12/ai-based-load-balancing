@@ -2,9 +2,9 @@
 
 ## Current candidate
 
-- Release candidate: `v1.0.3`
-- Source hardening commit: `1170dd1`
-- Current archive: `AI_Based_Load_Balancing_v1.0.3.zip`
+- Release candidate: `v1.0.4`
+- Source hardening commits: `1170dd1`, `3f49f6f`
+- Current archive: `AI_Based_Load_Balancing_v1.0.4.zip`
 - Historical benchmark matrix: 36 valid runs, preserved unchanged
 
 ## Closure edits after v1.0.2
@@ -17,6 +17,14 @@ The following code hardening was applied after the v1.0.2 archive state:
 - Model activation validates the selected artifact itself before activation.
 
 These edits are included in `AI_Based_Load_Balancing_v1.0.3.zip`.
+
+## Frontend closure after v1.0.3
+
+Commit `3f49f6f` adds pinned frontend dependency versions, semantic HTML,
+accessible labels and status attributes, stable initial loading behavior,
+non-flickering background refresh, safer error extraction, session-scoped
+operator-token persistence, and an HTML document shell. These changes are
+included in `AI_Based_Load_Balancing_v1.0.4.zip`.
 
 ## Known limitations
 

@@ -10,6 +10,7 @@
 - [x] Docker Compose and Nginx validation completed.
 - [x] Historical 36-run benchmark matrix preserved.
 - [x] Release archive excludes `.env`, databases, dependencies, logs, and machine-specific files.
+- [x] Current candidate archive matches the latest committed frontend hardening.
 
 ## Remaining technical limitations
 
