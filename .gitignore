@@ -39,3 +39,4 @@ experiments/raw-local/
 .idea/
 .DS_Store
 Thumbs.db
+*.tsbuildinfo
