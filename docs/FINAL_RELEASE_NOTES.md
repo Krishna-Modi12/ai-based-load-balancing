@@ -2,9 +2,9 @@
 
 ## Current candidate
 
-- Release candidate: `v1.0.5`
+- Release candidate: `v1.0.6`
 - Source hardening commits: `1170dd1`, `3f49f6f`, `2dc6361`
-- Current archive: `AI_Based_Load_Balancing_v1.0.5.zip`
+- Current archive: `AI_Based_Load_Balancing_v1.0.6.zip`
 - Historical benchmark matrix: 36 valid runs, preserved unchanged
 
 ## Closure edits after v1.0.2
@@ -24,7 +24,7 @@ Commit `3f49f6f` adds pinned frontend dependency versions, semantic HTML,
 accessible labels and status attributes, stable initial loading behavior,
 non-flickering background refresh, safer error extraction, session-scoped
 operator-token handling in memory only, and an HTML document shell. These changes are
-included in `AI_Based_Load_Balancing_v1.0.5.zip`.
+included in `AI_Based_Load_Balancing_v1.0.6.zip`.
 
 ## Known limitations
 

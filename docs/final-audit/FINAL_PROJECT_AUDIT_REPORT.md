@@ -25,7 +25,7 @@ The project has a real Layer-7 proxy, registered-backend routing, conventional b
 
 ## Blocking or high-priority issues
 
-The PostgreSQL API startup, health checks, migrations, routing, record creation, and persistence across API restart were independently verified without deleting the existing volume. An isolated clean archive installation also initialized a separate PostgreSQL volume and passed service, frontend, worker, and routing smoke checks. Playwright exercised the live dashboard controls. Metrics window/step handling and model activation artifact validation were hardened in the v1.0.3 candidate. Failure-scenario automation remains partial, multi-process policy concurrency remains untested, and manual Word/PPT inspection remains blocked.
+The PostgreSQL API startup, health checks, migrations, routing, record creation, and persistence across API restart were independently verified without deleting the existing volume. An isolated clean archive installation also initialized a separate PostgreSQL volume and passed service, frontend, worker, and routing smoke checks. Playwright exercised the live dashboard controls, including a latest smoke with zero browser errors and zero failed requests. Metrics window/step handling, model activation artifact validation, frontend accessibility structure, and in-memory-only token handling are included in the v1.0.5 candidate. Failure-scenario automation remains partial, multi-process policy concurrency remains untested, and manual Word/PPT inspection remains blocked.
 
 ## Phase 11 closure
 
