@@ -2,9 +2,9 @@
 
 ## Current candidate
 
-- Release candidate: `v1.0.2`
-- Latest commit before subsequent closure edits: `9aeac39`
-- Current archive: `AI_Based_Load_Balancing_v1.0.2.zip`
+- Release candidate: `v1.0.3`
+- Source hardening commit: `1170dd1`
+- Current archive: `AI_Based_Load_Balancing_v1.0.3.zip`
 - Historical benchmark matrix: 36 valid runs, preserved unchanged
 
 ## Closure edits after v1.0.2
@@ -16,7 +16,7 @@ The following code hardening was applied after the v1.0.2 archive state:
 - Metrics timeseries now aggregates decisions into the requested step buckets.
 - Model activation validates the selected artifact itself before activation.
 
-These edits require a new release candidate archive if they are intended for submission.
+These edits are included in `AI_Based_Load_Balancing_v1.0.3.zip`.
 
 ## Known limitations
 
