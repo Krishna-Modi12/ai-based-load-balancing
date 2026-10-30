@@ -3,7 +3,7 @@
 ## Current candidate
 
 - Release candidate: `v1.0.5`
-- Source hardening commits: `1170dd1`, `3f49f6f`, `pending token-handling fix`
+- Source hardening commits: `1170dd1`, `3f49f6f`, `2dc6361`
 - Current archive: `AI_Based_Load_Balancing_v1.0.5.zip`
 - Historical benchmark matrix: 36 valid runs, preserved unchanged
 
