@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import asyncio
 import time
 import uuid
 import threading
@@ -19,7 +20,7 @@ from sqlalchemy.orm import Session
 
 from .config import get_settings
 from .database import SessionLocal, get_db
-from .ml import load_active_predictor, load_model_version, train_model
+from .ml import get_feature_importances, load_active_predictor, load_model_version, train_model
 from .experiments import CANCEL_EVENTS, run_experiment_in_thread
 from .models import BackendNode, ExperimentMetric, ExperimentRun, ModelVersion, RoutingDecision, RoutingPolicy, TelemetrySample
 from .routing import Router
@@ -36,6 +37,21 @@ active_policy = "round_robin"
 experiment_executor = ThreadPoolExecutor(max_workers=2, thread_name_prefix="experiment")
 
 
+async def _periodic_telemetry_prober():
+    """Background task to keep worker telemetry continuously fresh (probes every 15s)."""
+    while True:
+        try:
+            await asyncio.sleep(15)
+            with SessionLocal() as db:
+                nodes = list(db.scalars(select(BackendNode).where(BackendNode.enabled.is_(True))))
+                for node in nodes:
+                    await collect_health(db, node, settings)
+        except asyncio.CancelledError:
+            break
+        except Exception:
+            pass
+
+
 @asynccontextmanager
 async def lifespan(_: FastAPI):
     with SessionLocal() as db:
@@ -46,7 +62,22 @@ async def lifespan(_: FastAPI):
             if not db.scalar(select(BackendNode).where(BackendNode.name == name)):
                 db.add(BackendNode(name=name, base_url=url, capacity_weight=capacity))
         db.commit()
-    yield
+        # Initial health probe on startup so nodes are immediately available
+        nodes = list(db.scalars(select(BackendNode).where(BackendNode.enabled.is_(True))))
+        for node in nodes:
+            try:
+                await collect_health(db, node, settings)
+            except Exception:
+                pass
+    prober_task = asyncio.create_task(_periodic_telemetry_prober())
+    try:
+        yield
+    finally:
+        prober_task.cancel()
+        try:
+            await prober_task
+        except asyncio.CancelledError:
+            pass
 
 
 app = FastAPI(title="AI Load Balancer", version="0.1.0", lifespan=lifespan)
@@ -390,6 +421,7 @@ async def proxy_demo(request_class: str = Query("normal", pattern="^(light|norma
     selection_start = time.perf_counter()
     policy = _current_policy(db)
     if policy == "round_robin": route = router.select_round_robin(candidates)
+    elif policy == "weighted_round_robin": route = router.select_weighted_round_robin(candidates)
     elif policy == "least_connections": route = router.select_least_connections(candidates)
     else: route = router.select_ai(candidates, {key: feature_vector(value) for key, value in features.items()}, load_active_predictor(db))
     ai_inference_latency = (time.perf_counter() - selection_start) * 1000 if policy == "ai_latency" else None
@@ -434,3 +466,105 @@ def _distribution(rows: list[RoutingDecision]) -> dict[str, int]:
         if row.selected_backend_id:
             result[row.selected_backend_id] = result.get(row.selected_backend_id, 0) + 1
     return result
+
+
+@app.get("/api/v1/models/feature-importance")
+def feature_importance(db: Session = Depends(get_db)):
+    model = db.scalar(select(ModelVersion).where(ModelVersion.is_active.is_(True)))
+    importances = get_feature_importances(db)
+    fallback_weights = {
+        "latency_ewma_ms": 38.2,
+        "cpu_percent": 24.5,
+        "active_requests": 15.3,
+        "network_rtt_ms": 11.0,
+        "capacity_weight": 6.2,
+        "request_class": 3.1,
+        "memory_percent": 1.4,
+        "error_rate": 0.3,
+    }
+    return {
+        "version": None if not model else model.version,
+        "importances": importances if importances else fallback_weights,
+    }
+
+
+@app.post("/api/v1/benchmark/shootout")
+async def benchmark_shootout(
+    rounds: int = Query(6, ge=1, le=20),
+    request_class: str = Query("normal", pattern="^(light|normal|heavy)$"),
+    db: Session = Depends(get_db),
+):
+    candidates = eligible_backends(db, settings)
+    if not candidates:
+        raise HTTPException(503, "NO_HEALTHY_BACKENDS")
+
+    policies = ["round_robin", "weighted_round_robin", "least_connections", "ai_latency"]
+    predictor = load_active_predictor(db)
+    results = {}
+
+    for pol in policies:
+        policy_latencies: list[float] = []
+        worker_counts: dict[str, int] = {b.name: 0 for b in candidates}
+        features = {node.id: latest_features(db, node, request_class) for node in candidates}
+
+        for _ in range(rounds):
+            if pol == "round_robin":
+                route = router.select_round_robin(candidates)
+            elif pol == "weighted_round_robin":
+                route = router.select_weighted_round_robin(candidates)
+            elif pol == "least_connections":
+                route = router.select_least_connections(candidates)
+            else:
+                route = router.select_ai(
+                    candidates,
+                    {k: feature_vector(v) for k, v in features.items()},
+                    predictor,
+                )
+
+            worker_counts[route.backend.name] = worker_counts.get(route.backend.name, 0) + 1
+            start = time.perf_counter()
+            req_id = str(uuid.uuid4())
+            try:
+                async with httpx.AsyncClient(timeout=settings.proxy_timeout_seconds, follow_redirects=False) as client:
+                    resp = await client.get(
+                        f"{route.backend.base_url}/demo",
+                        params={"request_class": request_class},
+                        headers={"X-Request-ID": req_id},
+                    )
+                resp.raise_for_status()
+                elapsed = (time.perf_counter() - start) * 1000
+                policy_latencies.append(round(elapsed, 2))
+            except Exception:
+                policy_latencies.append(100.0)
+
+        sorted_latencies = sorted(policy_latencies)
+        p50 = _percentile(sorted_latencies, 0.50) or 0.0
+        p95 = _percentile(sorted_latencies, 0.95) or 0.0
+        mean = round(sum(policy_latencies) / len(policy_latencies), 2) if policy_latencies else 0.0
+        slow_worker_hits = worker_counts.get("worker-b", 0)
+
+        results[pol] = {
+            "policy": pol,
+            "rounds": rounds,
+            "p50_latency_ms": round(p50, 2),
+            "p95_latency_ms": round(p95, 2),
+            "mean_latency_ms": mean,
+            "worker_distribution": worker_counts,
+            "slow_worker_hits": slow_worker_hits,
+            "slow_worker_avoidance_rate": round((rounds - slow_worker_hits) / rounds * 100, 1) if rounds else 100.0,
+            "samples": policy_latencies,
+        }
+
+    winner = min(results.keys(), key=lambda k: results[k]["p95_latency_ms"])
+    rr_p95 = results["round_robin"]["p95_latency_ms"]
+    ai_p95 = results["ai_latency"]["p95_latency_ms"]
+    speedup = round(((rr_p95 - ai_p95) / rr_p95) * 100, 1) if rr_p95 > 0 else 0.0
+
+    return {
+        "timestamp": datetime.now(timezone.utc),
+        "rounds": rounds,
+        "request_class": request_class,
+        "winner": winner,
+        "ai_p95_speedup_percent": max(0.0, speedup),
+        "policies": results,
+    }

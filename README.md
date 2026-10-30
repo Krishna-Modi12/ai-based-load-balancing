@@ -4,14 +4,14 @@
 
 ### An observable Layer-7 HTTP reverse proxy with conventional and AI-assisted routing
 
-[![Release](https://img.shields.io/badge/release-v1.0.7-0f766e?style=for-the-badge)](docs/FINAL_RELEASE_NOTES.md)
-[![Backend tests](https://img.shields.io/badge/backend%20tests-25%20passed-16a34a?style=for-the-badge)](backend/tests/)
+[![Release](https://img.shields.io/badge/release-v1.2.0-0f766e?style=for-the-badge)](docs/FINAL_RELEASE_NOTES.md)
+[![Backend tests](https://img.shields.io/badge/backend%20tests-26%20passed-16a34a?style=for-the-badge)](backend/tests/)
 [![Python](https://img.shields.io/badge/Python-3.11%2B-3776AB?style=for-the-badge&logo=python&logoColor=white)](https://www.python.org/)
 [![FastAPI](https://img.shields.io/badge/FastAPI-0.116-009688?style=for-the-badge&logo=fastapi&logoColor=white)](https://fastapi.tiangolo.com/)
 [![React](https://img.shields.io/badge/React-19-61DAFB?style=for-the-badge&logo=react&logoColor=111827)](https://react.dev/)
 [![PostgreSQL](https://img.shields.io/badge/PostgreSQL-16-4169E1?style=for-the-badge&logo=postgresql&logoColor=white)](https://www.postgresql.org/)
 
-**A full-stack Computer Networks project for comparing Round Robin, Least Connections, and supervised Random Forest latency prediction under real HTTP traffic.**
+**A full-stack Computer Networks project for comparing Round Robin, Weighted Round Robin, Least Connections, and supervised Random Forest latency prediction under real HTTP traffic.**
 
 [Quick start](#quick-start) · [Architecture](#architecture) · [Live demo flow](#live-demo-flow) · [Research results](#research-results) · [Documentation](#documentation)
 

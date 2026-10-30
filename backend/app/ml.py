@@ -83,3 +83,24 @@ def load_active_predictor(db: Session) -> StoredPredictor | None:
 def load_model_version(db: Session, version: str) -> StoredPredictor | None:
     """Validate a specific persisted artifact before activation."""
     return _load_predictor(db.scalar(select(ModelVersion).where(ModelVersion.version == version)))
+
+
+def get_feature_importances(db: Session) -> dict[str, float] | None:
+    """Extract normalized feature importance weights from the active Random Forest model."""
+    version = db.scalar(select(ModelVersion).where(ModelVersion.is_active.is_(True)))
+    if not version or not version.artifact_uri:
+        return None
+    try:
+        payload = joblib.load(Path(version.artifact_uri))
+        model = payload.get("model")
+        if hasattr(model, "feature_importances_"):
+            importances = model.feature_importances_
+            names = payload.get("feature_names", FEATURE_NAMES)
+            total = sum(importances) or 1.0
+            return {
+                name: round(float(imp / total) * 100, 2)
+                for name, imp in zip(names, importances)
+            }
+    except Exception:
+        return None
+    return None

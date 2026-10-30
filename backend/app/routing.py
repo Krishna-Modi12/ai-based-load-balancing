@@ -31,6 +31,17 @@ class Router:
         self._cursor += 1
         return SelectedRoute(backend, "round_robin")
 
+    def select_weighted_round_robin(self, candidates: list[BackendNode]) -> SelectedRoute:
+        flat_cycle: list[BackendNode] = []
+        for b in candidates:
+            w = max(1, int(round(b.capacity_weight)))
+            flat_cycle.extend([b] * w)
+        if not flat_cycle:
+            return self.select_round_robin(candidates)
+        backend = flat_cycle[self._cursor % len(flat_cycle)]
+        self._cursor += 1
+        return SelectedRoute(backend, "weighted_round_robin")
+
     def select_least_connections(self, candidates: list[BackendNode]) -> SelectedRoute:
         backend = min(candidates, key=lambda b: (self.inflight.get(b.id, 0), b.name))
         return SelectedRoute(backend, "least_connections")

@@ -15,7 +15,7 @@ class BackendPatch(BaseModel):
 
 
 class PolicyUpdate(BaseModel):
-    policy: str = Field(pattern="^(round_robin|least_connections|ai_latency)$")
+    policy: str = Field(pattern="^(round_robin|weighted_round_robin|least_connections|ai_latency)$")
 
 
 class BackendOut(BaseModel):
@@ -63,13 +63,13 @@ class ModelVersionOut(BaseModel):
 
 
 WORKLOAD_PROFILES = ("uniform", "heterogeneous", "bursty", "mixed")
-EXPERIMENT_POLICIES = ("round_robin", "least_connections", "ai_latency")
+EXPERIMENT_POLICIES = ("round_robin", "weighted_round_robin", "least_connections", "ai_latency")
 FAILURE_SCENARIOS = ("none", "node_failure", "stale_telemetry", "missing_model", "timeout")
 
 
 class ExperimentConfig(BaseModel):
     name: str = Field(min_length=1, max_length=200)
-    policy: Literal["round_robin", "least_connections", "ai_latency"]
+    policy: Literal["round_robin", "weighted_round_robin", "least_connections", "ai_latency"]
     workload_profile: Literal["uniform", "heterogeneous", "bursty", "mixed"]
     repetition: int = Field(default=1, ge=1, le=100)
     scenario: Literal["none", "node_failure", "stale_telemetry", "missing_model", "timeout"] = "none"

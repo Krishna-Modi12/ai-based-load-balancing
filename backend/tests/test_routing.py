@@ -11,6 +11,17 @@ def test_round_robin_cycles_in_stable_order():
     assert [routing.select_round_robin(candidates).backend.name for _ in range(4)] == ["a", "b", "a", "b"]
 
 
+def test_weighted_round_robin_respects_capacity_weights():
+    routing = Router()
+    candidates = [
+        BackendNode(id="a", name="a", base_url="http://a", capacity_weight=2.0),
+        BackendNode(id="b", name="b", base_url="http://b", capacity_weight=1.0),
+    ]
+    assert [routing.select_weighted_round_robin(candidates).backend.name for _ in range(6)] == [
+        "a", "a", "b", "a", "a", "b"
+    ]
+
+
 def test_least_connections_uses_name_as_deterministic_tie_breaker():
     routing = Router(); candidates = nodes(); routing.inflight = {"a": 3, "b": 1}
     assert routing.select_least_connections(candidates).backend.name == "b"
