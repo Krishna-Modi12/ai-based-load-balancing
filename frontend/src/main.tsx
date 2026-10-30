@@ -7,6 +7,7 @@ import {
   Server,
   Zap,
   Play,
+  Pause,
   Key,
   CheckCircle2,
   AlertTriangle,
@@ -30,7 +31,10 @@ import {
   Network,
   GitBranch,
   ChevronDown,
-  ChevronUp
+  ChevronUp,
+  RefreshCw,
+  Power,
+  ZapOff
 } from "lucide-react";
 import "./style.css";
 
@@ -156,11 +160,13 @@ function App() {
   const [isAutoRefresh, setIsAutoRefresh] = useState(true);
   const [showBeginnerGuide, setShowBeginnerGuide] = useState(false);
 
-  // Playground state
+  // Playground & Auto-Pilot Simulation state
   const [selectedClass, setSelectedClass] = useState<"light" | "normal" | "heavy">("normal");
   const [isSendingTraffic, setIsSendingTraffic] = useState(false);
   const [trafficBatchProgress, setTrafficBatchProgress] = useState<string>("");
   const [lastResult, setLastResult] = useState<LastRouteResult | null>(null);
+  const [isSimulatorRunning, setIsSimulatorRunning] = useState(false);
+  const [simulatedCount, setSimulatedCount] = useState(0);
 
   const isInitialMount = useRef(true);
 
@@ -223,7 +229,7 @@ function App() {
         body: JSON.stringify({ policy }),
       });
     } catch {
-      // Error handled in action()
+      // Handled in action
     }
   };
 
@@ -233,7 +239,7 @@ function App() {
         method: "POST",
       });
     } catch {
-      // Error handled in action()
+      // Handled in action
     }
   };
 
@@ -241,10 +247,10 @@ function App() {
     try {
       const res = await action("Train AI Latency Predictor", "/api/v1/models/train", { method: "POST" });
       if (res && res.version) {
-        setNotice(`Model ${res.version} successfully trained across ${res.samples} samples (MAE: ${res.mae_ms?.toFixed(2)}ms)`);
+        setNotice(`Model ${res.version} successfully calibrated over ${res.samples} samples (MAE: ${res.mae_ms?.toFixed(2)}ms)`);
       }
     } catch {
-      // Error handled in action()
+      // Handled in action
     }
   };
 
@@ -261,8 +267,10 @@ function App() {
         timestamp: new Date(),
       });
       await refresh(true);
+      return body;
     } catch (e: any) {
       setError(e.message || "Request failed");
+      return null;
     } finally {
       setIsSendingTraffic(false);
     }
@@ -294,6 +302,66 @@ function App() {
     setIsSendingTraffic(false);
     setTrafficBatchProgress("");
     await refresh(false);
+  };
+
+  // Continuous Simulator Loop
+  useEffect(() => {
+    if (!isSimulatorRunning) return;
+    const interval = setInterval(async () => {
+      const classes: ("light" | "normal" | "heavy")[] = ["light", "normal", "heavy"];
+      const randomClass = classes[Math.floor(Math.random() * classes.length)];
+      try {
+        const res = await fetch(`${api}/api/v1/route?request_class=${randomClass}`);
+        const body = await res.json();
+        if (res.ok) {
+          setLastResult({ ...body, timestamp: new Date() });
+          setSimulatedCount((c) => c + 1);
+        }
+      } catch {
+        // Silent error in background simulator
+      }
+    }, 2200);
+
+    return () => clearInterval(interval);
+  }, [isSimulatorRunning]);
+
+  // One-Click Interactive Demos / Scenarios
+  const runScenario = async (scenario: "ai_advantage" | "chaos_failover" | "round_robin_lag") => {
+    setNotice("");
+    setError("");
+
+    if (scenario === "ai_advantage") {
+      setNotice("Running Scenario 1: Demonstrating AI Latency optimization on mixed workloads...");
+      await setPolicy("ai_latency");
+      await healthCheck();
+      await sendTrafficBurst(5, "heavy");
+    } else if (scenario === "chaos_failover") {
+      const workerA = backends.find((b) => b.name === "worker-a");
+      if (!workerA) return;
+      setNotice("Running Scenario 2: Simulating Worker A outage — Testing real-time AI failover...");
+      // Disable worker A
+      await action("Disable Worker A (Simulate Outage)", `/api/v1/backends/${workerA.id}`, {
+        method: "PATCH",
+        body: JSON.stringify({ enabled: false }),
+      });
+      await healthCheck();
+      // Send 3 requests to watch them bypass worker A
+      await sendTrafficBurst(3, "normal");
+      // Re-enable
+      setTimeout(async () => {
+        await action("Restore Worker A (Recovered)", `/api/v1/backends/${workerA.id}`, {
+          method: "PATCH",
+          body: JSON.stringify({ enabled: true }),
+        });
+        await healthCheck();
+        setNotice("Worker A successfully restored. Zero downtime maintained.");
+      }, 5000);
+    } else if (scenario === "round_robin_lag") {
+      setNotice("Running Scenario 3: Blind Round Robin — Demonstrating Worker B bottleneck...");
+      await setPolicy("round_robin");
+      await healthCheck();
+      await sendTrafficBurst(4, "heavy");
+    }
   };
 
   const toggleBackend = (backend: Backend) =>
@@ -359,13 +427,20 @@ function App() {
 
   let p50: number | undefined;
   let p95: number | undefined;
+  let avgLatency: number | undefined;
   if (withLatency.length > 0) {
     p50 = withLatency[Math.floor(withLatency.length * 0.5)];
     p95 = withLatency[Math.min(withLatency.length - 1, Math.floor(withLatency.length * 0.95))];
+    avgLatency = withLatency.reduce((sum, v) => sum + v, 0) / withLatency.length;
   }
 
-  // Active target worker for diagram (defaults to lastResult or first decision)
-  const activeWorkerName = lastResult?.backend || (decisions[0]?.selected_backend_id ? backendMap.get(decisions[0].selected_backend_id) || "worker-a" : "worker-a");
+  // Active target worker for diagram
+  const activeWorkerName =
+    lastResult?.backend ||
+    (decisions[0]?.selected_backend_id ? backendMap.get(decisions[0].selected_backend_id) || "worker-a" : "worker-a");
+
+  // Worker B skip count for AI optimization proof
+  const workerBSkips = decisions.filter((d) => d.policy === "ai_latency" && backendMap.get(d.selected_backend_id || "") !== "worker-b").length;
 
   return (
     <div className="min-h-screen bg-surface-lowest text-slate-100 flex flex-col font-sans selection:bg-primary/20 selection:text-primary">
@@ -403,21 +478,21 @@ function App() {
           {/* AI Model State */}
           <div className="hidden xl:flex items-center gap-1.5 px-2.5 py-1 bg-surface-low border border-border-subtle rounded-md font-mono text-xs text-slate-300">
             <Sparkles className="w-3.5 h-3.5 text-tertiary" />
-            <span>AI Predictor:</span>
+            <span>AI Model:</span>
             <span className={`font-semibold ${status.model_ready ? "text-tertiary" : "text-amber"}`}>
-              {status.model_ready ? status.model_version || "Trained & Active" : "Untrained (Fallback Active)"}
+              {status.model_ready ? status.model_version || "Calibrated & Active" : "Uncalibrated (Fallback Active)"}
             </span>
           </div>
         </div>
 
-        {/* Top Controls: Admin Token & Helpers */}
+        {/* Top Controls: Beginner Guide, Admin Token & Helpers */}
         <div className="flex items-center gap-2 sm:gap-3">
           {/* Beginner Guide Toggle Button */}
           <button
             onClick={() => setShowBeginnerGuide(!showBeginnerGuide)}
             className={`flex items-center gap-1.5 px-2.5 py-1 rounded-md border text-xs font-mono transition-all ${
               showBeginnerGuide
-                ? "bg-primary text-slate-950 font-bold border-primary"
+                ? "bg-primary text-slate-950 font-bold border-primary shadow-sm"
                 : "bg-surface-low hover:bg-surface-high text-primary border-primary/30"
             }`}
             title="Toggle plain-English explanation of how this works"
@@ -597,8 +672,22 @@ function App() {
               </p>
             </div>
 
-            {/* Quick Calibration Buttons */}
+            {/* Live Auto-Pilot Simulator + Calibration */}
             <div className="flex flex-wrap items-center gap-2">
+              {/* Continuous Auto-Pilot Toggle */}
+              <button
+                onClick={() => setIsSimulatorRunning(!isSimulatorRunning)}
+                className={`inline-flex items-center gap-1.5 px-3 py-1.5 rounded-md text-xs font-mono font-bold transition-all ${
+                  isSimulatorRunning
+                    ? "bg-amber text-slate-950 shadow-[0_0_12px_rgba(245,158,11,0.5)] animate-pulse"
+                    : "bg-surface-high hover:bg-surface-bright text-slate-200 border border-border"
+                }`}
+                title="Continuously dispatch real-time traffic pulses"
+              >
+                {isSimulatorRunning ? <Pause className="w-3.5 h-3.5 fill-current" /> : <Play className="w-3.5 h-3.5 fill-current" />}
+                <span>{isSimulatorRunning ? `Auto-Pilot ON (${simulatedCount})` : "Start Auto-Pilot"}</span>
+              </button>
+
               <button
                 onClick={healthCheck}
                 className="inline-flex items-center gap-1.5 px-3 py-1.5 bg-surface-high hover:bg-surface-bright text-secondary border border-secondary/40 rounded-md text-xs font-mono font-medium transition-all"
@@ -728,6 +817,37 @@ function App() {
               )}
             </div>
           </div>
+
+          {/* Interactive 1-Click Scenario Demo Presets */}
+          <div className="mt-5 pt-4 border-t border-border-subtle flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+            <span className="text-xs font-mono text-slate-400 flex items-center gap-1.5">
+              <Play className="w-3.5 h-3.5 text-secondary" />
+              <span>Interactive 1-Click Scenarios:</span>
+            </span>
+            <div className="flex flex-wrap items-center gap-2">
+              <button
+                onClick={() => runScenario("ai_advantage")}
+                className="px-2.5 py-1 bg-surface-high hover:bg-surface-bright text-secondary border border-secondary/30 rounded text-xs font-mono transition-colors"
+                title="Run Heavy traffic under AI Latency policy to demonstrate avoiding Worker B"
+              >
+                🎯 Scenario 1: AI vs Asymmetry
+              </button>
+              <button
+                onClick={() => runScenario("chaos_failover")}
+                className="px-2.5 py-1 bg-surface-high hover:bg-surface-bright text-tertiary border border-tertiary/30 rounded text-xs font-mono transition-colors"
+                title="Disable Worker A temporarily to demonstrate automatic failover to Worker C"
+              >
+                🛡️ Scenario 2: Chaos Outage Failover
+              </button>
+              <button
+                onClick={() => runScenario("round_robin_lag")}
+                className="px-2.5 py-1 bg-surface-high hover:bg-surface-bright text-amber border border-amber/30 rounded text-xs font-mono transition-colors"
+                title="Demonstrate how Round Robin gets stuck on slow Worker B"
+              >
+                🔄 Scenario 3: Blind Round Robin Bottleneck
+              </button>
+            </div>
+          </div>
         </section>
 
         {/* ---------------------------------------------------- */}
@@ -747,8 +867,8 @@ function App() {
               </p>
             </div>
             <div className="flex items-center gap-2 font-mono text-xs text-slate-400">
-              <span className="px-2 py-0.5 bg-secondary/10 border border-secondary/30 text-secondary rounded">
-                Active Target: {activeWorkerName}
+              <span className="px-2.5 py-1 bg-secondary/10 border border-secondary/30 text-secondary rounded-md font-bold">
+                Active Route: {activeWorkerName}
               </span>
             </div>
           </div>
@@ -761,6 +881,7 @@ function App() {
                 selectedClass={selectedClass}
                 policy={status.policy}
                 lastResult={lastResult}
+                isSimulatorRunning={isSimulatorRunning}
               />
             </div>
 
@@ -769,7 +890,7 @@ function App() {
               <div className="bg-surface border border-border-subtle rounded-xl p-4">
                 <div className="flex items-center gap-2 text-primary font-bold text-xs uppercase mb-2">
                   <GitBranch className="w-4 h-4" />
-                  <span>Why this Path was Chosen?</span>
+                  <span>Optimal Path Decision Breakdown</span>
                 </div>
                 
                 <div className="space-y-3 font-sans text-xs text-slate-300">
@@ -798,6 +919,27 @@ function App() {
                 <div className="mt-4 pt-3 border-t border-border-subtle/50 font-mono text-[11px] text-slate-400 flex items-center justify-between">
                   <span>Routing Strategy:</span>
                   <span className="text-secondary font-bold uppercase">{status.policy.replace("_", " ")}</span>
+                </div>
+              </div>
+
+              {/* Real-time Advantage Card */}
+              <div className="bg-surface border border-border-subtle rounded-xl p-4">
+                <div className="flex items-center justify-between text-xs text-slate-400 pb-2 border-b border-border-subtle/50">
+                  <span className="uppercase font-semibold">AI Efficiency Gain</span>
+                  <Sparkles className="w-3.5 h-3.5 text-secondary" />
+                </div>
+                <div className="mt-2 space-y-1.5 font-sans">
+                  <div className="flex items-center justify-between font-mono text-xs">
+                    <span className="text-slate-400">Average Cluster Latency:</span>
+                    <span className="text-secondary font-bold">{formatNumber(avgLatency, 1, " ms")}</span>
+                  </div>
+                  <div className="flex items-center justify-between font-mono text-xs">
+                    <span className="text-slate-400">Worker B Avoided:</span>
+                    <span className="text-primary font-bold">{workerBSkips} times</span>
+                  </div>
+                  <p className="text-[11px] text-slate-500 mt-1">
+                    AI prevents slow nodes from degrading the overall P95 latency SLA.
+                  </p>
                 </div>
               </div>
             </div>
@@ -946,11 +1088,11 @@ function App() {
               <span className="font-mono text-2xl sm:text-3xl font-bold text-slate-100">
                 {decisions.length.toLocaleString()}
               </span>
-              <span className="text-[11px] font-mono text-slate-500">Live Telemetry</span>
+              <span className="text-[11px] font-mono text-slate-500">Live Ingress</span>
             </div>
             <div className="mt-3 flex items-center gap-1.5 text-xs text-secondary font-mono">
               <TrendingUp className="w-3.5 h-3.5" />
-              <span>Real-time Ingress Active</span>
+              <span>Real-time Telemetry</span>
             </div>
           </div>
 
@@ -1477,11 +1619,13 @@ function OptimalPathSVG({
   selectedClass,
   policy,
   lastResult,
+  isSimulatorRunning,
 }: {
   activeWorker: string;
   selectedClass: string;
   policy: string;
   lastResult: LastRouteResult | null;
+  isSimulatorRunning: boolean;
 }) {
   const isA = activeWorker === "worker-a";
   const isB = activeWorker === "worker-b";
@@ -1526,8 +1670,7 @@ function OptimalPathSVG({
           d="M 120 130 L 260 130"
           stroke="#06b6d4"
           strokeWidth="3"
-          strokeDasharray="6 4"
-          className="animate-pulse"
+          className={isSimulatorRunning ? "animate-packet-flow-fast" : "animate-packet-flow"}
         />
 
         {/* Branch Path to Worker A */}
@@ -1538,7 +1681,7 @@ function OptimalPathSVG({
           strokeWidth={isA ? "4" : "1.5"}
           strokeDasharray={isA ? undefined : "4 4"}
           filter={isA ? "url(#glowGreen)" : undefined}
-          className={isA ? "transition-all duration-300" : "opacity-40"}
+          className={isA ? (isSimulatorRunning ? "animate-packet-flow-fast" : "animate-packet-flow") : "opacity-40"}
         />
 
         {/* Branch Path to Worker B */}
@@ -1549,7 +1692,7 @@ function OptimalPathSVG({
           strokeWidth={isB ? "4" : "1.5"}
           strokeDasharray={isB ? undefined : "4 4"}
           filter={isB ? "url(#glowGreen)" : undefined}
-          className={isB ? "transition-all duration-300" : "opacity-40"}
+          className={isB ? (isSimulatorRunning ? "animate-packet-flow-fast" : "animate-packet-flow") : "opacity-40"}
         />
 
         {/* Branch Path to Worker C */}
@@ -1560,7 +1703,7 @@ function OptimalPathSVG({
           strokeWidth={isC ? "4" : "1.5"}
           strokeDasharray={isC ? undefined : "4 4"}
           filter={isC ? "url(#glowGreen)" : undefined}
-          className={isC ? "transition-all duration-300" : "opacity-40"}
+          className={isC ? (isSimulatorRunning ? "animate-packet-flow-fast" : "animate-packet-flow") : "opacity-40"}
         />
 
         {/* ---------------- NODE 1: CLIENT INGRESS ---------------- */}
