@@ -886,7 +886,7 @@ function App() {
       {/* ---------------------------------------------------- */}
       {/* FLOATING TOAST NOTIFICATIONS                         */}
       {/* ---------------------------------------------------- */}
-      <div className="fixed bottom-5 right-5 z-50 flex flex-col gap-2 max-w-sm w-full pointer-events-none">
+      <div className="fixed bottom-5 right-5 z-50 flex flex-col gap-2 max-w-sm w-full pointer-events-none" role="status" aria-live="polite">
         {toasts.map((t) => (
           <div
             key={t.id}
@@ -918,6 +918,7 @@ function App() {
             <button
               onClick={() => removeToast(t.id)}
               className="text-slate-400 hover:text-slate-100 text-xs font-mono"
+              aria-label={`Dismiss ${t.title} notification`}
             >
               ✕
             </button>
@@ -936,9 +937,9 @@ function App() {
           </div>
           <div>
             <div className="flex items-center gap-2">
-              <span className="font-mono font-black text-sm tracking-widest text-slate-100 uppercase">
+              <h1 className="font-mono font-black text-sm tracking-widest text-slate-100 uppercase">
                 NET//PULSE
-              </span>
+              </h1>
               <span className="text-[10px] font-mono uppercase px-1.5 py-0.5 bg-primary/10 text-primary border border-primary/30 rounded font-bold">
                 L7 AI PROXY
               </span>
@@ -954,7 +955,11 @@ function App() {
           {/* Admin Token Input */}
           <div className="flex items-center gap-1.5 bg-surface-high border border-border-subtle rounded px-2.5 py-1">
             <Key className="w-3.5 h-3.5 text-primary" />
+            <label htmlFor="admin-token" className="sr-only">Admin token</label>
             <input
+              id="admin-token"
+              name="admin-token"
+              autoComplete="off"
               type={tokenVisible ? "text" : "password"}
               placeholder="Admin Token..."
               value={adminToken}
@@ -966,19 +971,10 @@ function App() {
               onClick={() => setTokenVisible(!tokenVisible)}
               className="text-slate-400 hover:text-slate-200"
               title={tokenVisible ? "Hide token" : "Show token"}
+              aria-label={tokenVisible ? "Hide admin token" : "Show admin token"}
             >
               {tokenVisible ? <EyeOff className="w-3.5 h-3.5" /> : <Eye className="w-3.5 h-3.5" />}
             </button>
-            {!adminToken && (
-              <button
-                type="button"
-                onClick={() => setAdminToken("phase6-local-admin-token")}
-                className="text-[10px] font-mono px-1.5 py-0.5 bg-primary/20 hover:bg-primary/30 text-primary rounded border border-primary/40 font-semibold"
-                title="Fill default local development admin token"
-              >
-                Use Local
-              </button>
-            )}
           </div>
 
           {/* Quick Retrain Button */}
@@ -1022,12 +1018,12 @@ function App() {
       {/* NOTIFICATIONS & WARNINGS                             */}
       {/* ---------------------------------------------------- */}
       {error && (
-        <div className="bg-error-container/20 border-b border-error/30 px-6 py-2 flex items-center justify-between text-xs font-mono text-error">
+        <div className="bg-error-container/20 border-b border-error/30 px-6 py-2 flex items-center justify-between text-xs font-mono text-error" role="alert">
           <div className="flex items-center gap-2">
             <AlertTriangle className="w-4 h-4 shrink-0" />
             <span>{error}</span>
           </div>
-          <button onClick={() => setError("")} className="hover:text-slate-100 font-bold">
+          <button onClick={() => setError("")} className="hover:text-slate-100 font-bold" aria-label="Dismiss error">
             ✕
           </button>
         </div>
