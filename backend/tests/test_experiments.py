@@ -43,17 +43,25 @@ def test_experiment_create_list_and_raw_exports():
         created = client.post("/api/v1/experiments", json=payload, headers={"X-Admin-Token": "change-me"})
         assert created.status_code == 201
         experiment_id = created.json()["id"]
-        listed = client.get("/api/v1/experiments")
+        listed = client.get("/api/v1/experiments", headers={"X-Admin-Token": "change-me"})
         assert listed.status_code == 200
         assert listed.json()[0]["id"] == experiment_id
-        detail = client.get(f"/api/v1/experiments/{experiment_id}/results")
+        detail = client.get(f"/api/v1/experiments/{experiment_id}/results", headers={"X-Admin-Token": "change-me"})
         assert detail.status_code == 200
-        exported_json = client.get(f"/api/v1/experiments/{experiment_id}/export?format=json")
-        exported_csv = client.get(f"/api/v1/experiments/{experiment_id}/export?format=csv")
+        exported_json = client.get(f"/api/v1/experiments/{experiment_id}/export?format=json", headers={"X-Admin-Token": "change-me"})
+        exported_csv = client.get(f"/api/v1/experiments/{experiment_id}/export?format=csv", headers={"X-Admin-Token": "change-me"})
     assert exported_json.status_code == 200
     assert exported_json.json()["raw_samples"] == []
     assert exported_csv.status_code == 200
     assert "Content-Disposition" in exported_csv.headers
+
+
+def test_experiment_reads_require_admin_token():
+    with TestClient(app) as client:
+        assert client.get("/api/v1/experiments").status_code == 401
+        assert client.get("/api/v1/experiments/not-found").status_code == 401
+        assert client.get("/api/v1/experiments/not-found/status").status_code == 401
+        assert client.get("/api/v1/experiments/not-found/export").status_code == 401
 
 
 def test_experiment_validation_rejects_unbounded_configuration():

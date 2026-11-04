@@ -402,11 +402,11 @@ function App() {
         fetch(`${api}/api/v1/backends`),
         fetch(`${api}/api/v1/decisions?limit=100`),
         fetch(`${api}/api/v1/system/status`),
-        fetch(`${api}/api/v1/experiments`),
+        fetch(`${api}/api/v1/experiments`, { headers: getHeaders(adminToken) }),
         fetch(`${api}/api/v1/system/circuit-breakers`).catch(() => ({ ok: false })),
       ]);
 
-      if (!b.ok || !d.ok || !s.ok || !e.ok) {
+      if (!b.ok || !d.ok || !s.ok) {
         throw new Error("One or more endpoints returned an error");
       }
 
@@ -415,7 +415,7 @@ function App() {
       setBackends(backendsData);
       setDecisions(decisionsData);
       setStatus(await s.json());
-      setExperiments(await e.json());
+      setExperiments(e.ok ? await e.json() : []);
       if ("json" in cb && cb.ok) {
         setCircuitBreakers(await (cb as Response).json());
       }
@@ -741,6 +741,27 @@ function App() {
     addToast("JSON Exported", `Exported ${decisions.length} decision logs.`, "success");
   };
 
+  const exportExperimentsJSON = async () => {
+    try {
+      const response = await fetch(`${api}/api/v1/experiments`, {
+        headers: getHeaders(adminToken),
+      });
+      const body = await response.json().catch(() => ({}));
+      if (!response.ok) throw new Error(extractErrorMessage(body, "Experiment export"));
+      const blob = new Blob([JSON.stringify(body, null, 2)], { type: "application/json" });
+      const url = URL.createObjectURL(blob);
+      const link = document.createElement("a");
+      link.href = url;
+      link.download = `load_balancer_experiments_${Date.now()}.json`;
+      link.click();
+      URL.revokeObjectURL(url);
+      addToast("Experiments Exported", `Exported ${body.length} experiment records.`, "success");
+    } catch (error) {
+      const message = error instanceof Error ? error.message : "Experiment export failed";
+      addToast("Experiment Export Failed", message, "error");
+    }
+  };
+
   // Auto-Pilot continuous simulator
   useEffect(() => {
     let timer: ReturnType<typeof setInterval> | null = null;
@@ -766,6 +787,10 @@ function App() {
     }, 4000);
     return () => clearInterval(interval);
   }, [isAutoRefresh]);
+
+  useEffect(() => {
+    if (adminToken) refresh(true);
+  }, [adminToken]);
 
   // Active worker name for SVG and card highlighting
   const activeWorkerName = lastResult?.backend || "worker-a";
@@ -2912,7 +2937,7 @@ function App() {
                   <span>Launch New Benchmark Run</span>
                 </button>
               </div>
-              <ExperimentMatrixSection experiments={experiments} />
+              <ExperimentMatrixSection experiments={experiments} onExport={exportExperimentsJSON} />
             </div>
           )}
 
@@ -3605,7 +3630,13 @@ function OptimalPathSVG({
 // ----------------------------------------------------
 // Benchmark Matrix Component
 // ----------------------------------------------------
-function ExperimentMatrixSection({ experiments }: { experiments: Experiment[] }) {
+function ExperimentMatrixSection({
+  experiments,
+  onExport,
+}: {
+  experiments: Experiment[];
+  onExport: () => void;
+}) {
   const completed = experiments.filter((e) => e.status === "completed" && e.metric);
   const p95Values = completed
     .map((e) => e.metric?.latency_p95_ms)
@@ -3716,14 +3747,13 @@ function ExperimentMatrixSection({ experiments }: { experiments: Experiment[] })
         </div>
 
         <div className="mt-6 pt-4 border-t border-border-subtle flex flex-col gap-2 font-mono text-xs">
-          <a
-            href={`${api}/api/v1/experiments`}
-            target="_blank"
-            rel="noreferrer"
+          <button
+            type="button"
+            onClick={onExport}
             className="w-full text-center py-2 bg-surface-high hover:bg-surface-bright text-primary border border-border rounded-lg transition-colors"
           >
-            Raw Experiments API JSON ↗
-          </a>
+            Export Experiments JSON
+          </button>
         </div>
       </div>
     </div>

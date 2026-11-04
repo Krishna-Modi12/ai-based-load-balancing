@@ -154,7 +154,7 @@ def create_experiment(payload: ExperimentConfig, db: Session = Depends(get_db)):
     return run
 
 
-@app.get("/api/v1/experiments", response_model=list[ExperimentListItem])
+@app.get("/api/v1/experiments", response_model=list[ExperimentListItem], dependencies=[Depends(require_admin)])
 def list_experiments(limit: int = Query(50, ge=1, le=200), db: Session = Depends(get_db)):
     runs = list(db.scalars(select(ExperimentRun).order_by(ExperimentRun.started_at.desc(), ExperimentRun.id.desc()).limit(limit)))
     result = []
@@ -167,8 +167,8 @@ def list_experiments(limit: int = Query(50, ge=1, le=200), db: Session = Depends
     return result
 
 
-@app.get("/api/v1/experiments/{experiment_id}", response_model=ExperimentDetail)
-@app.get("/api/v1/experiments/{experiment_id}/results", response_model=ExperimentDetail)
+@app.get("/api/v1/experiments/{experiment_id}", response_model=ExperimentDetail, dependencies=[Depends(require_admin)])
+@app.get("/api/v1/experiments/{experiment_id}/results", response_model=ExperimentDetail, dependencies=[Depends(require_admin)])
 def experiment_detail(experiment_id: str, db: Session = Depends(get_db)):
     run = db.get(ExperimentRun, experiment_id)
     if not run:
@@ -179,7 +179,7 @@ def experiment_detail(experiment_id: str, db: Session = Depends(get_db)):
     return _experiment_payload(run, metrics)
 
 
-@app.get("/api/v1/experiments/{experiment_id}/status", response_model=ExperimentOut)
+@app.get("/api/v1/experiments/{experiment_id}/status", response_model=ExperimentOut, dependencies=[Depends(require_admin)])
 def experiment_status(experiment_id: str, db: Session = Depends(get_db)):
     run = db.get(ExperimentRun, experiment_id)
     if not run:
@@ -216,7 +216,7 @@ def stop_experiment(experiment_id: str, db: Session = Depends(get_db)):
     return run
 
 
-@app.get("/api/v1/experiments/{experiment_id}/export")
+@app.get("/api/v1/experiments/{experiment_id}/export", dependencies=[Depends(require_admin)])
 def export_experiment(experiment_id: str, format: str = Query("json", pattern="^(csv|json)$"), db: Session = Depends(get_db)):
     run = db.get(ExperimentRun, experiment_id)
     if not run:
@@ -726,4 +726,3 @@ async def benchmark_stress_test(
         worker_distribution=worker_distribution,
         slow_worker_avoidance_rate=avoidance,
     )
-

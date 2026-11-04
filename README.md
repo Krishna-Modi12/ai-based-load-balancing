@@ -296,6 +296,9 @@ Open the generated Swagger UI at <http://localhost:8000/docs>.
 | `GET /api/v1/models/status` | Model readiness | No |
 | `POST /api/v1/models/train` | Train a model from observations | Admin |
 | `POST /api/v1/experiments` | Create a controlled experiment | Admin |
+| `GET /api/v1/experiments` | List experiment runs | Admin |
+| `GET /api/v1/experiments/{id}/results` | Read experiment metrics | Admin |
+| `GET /api/v1/experiments/{id}/export` | Export experiment data | Admin |
 
 Administrative requests use:
 
