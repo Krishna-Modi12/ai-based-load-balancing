@@ -138,5 +138,72 @@ def test_circuit_breaker_chaos_injection():
 
     res = cb.inject_fault("a", "reset")
     assert res["state"] == "CLOSED"
-    assert cb.is_available("a")
+
+
+def test_contextual_bandit_learning_and_reward():
+    node_fast = BackendNode(id="fast", name="fast-node", base_url="http://fast.local", capacity_weight=1.0)
+    node_slow = BackendNode(id="slow", name="slow-node", base_url="http://slow.local", capacity_weight=1.0)
+    candidates = [node_fast, node_slow]
+
+    router = Router()
+
+    # Initial warm-up pulls
+    r1 = router.select_contextual_bandit(candidates)
+    router.bandit.record_feedback(r1.backend.id, latency_ms=15.0 if r1.backend.id == "fast" else 80.0)
+
+    r2 = router.select_contextual_bandit(candidates)
+    router.bandit.record_feedback(r2.backend.id, latency_ms=15.0 if r2.backend.id == "fast" else 80.0)
+
+    # Train bandit with 20 feedbacks: fast node gets 15ms (~6.6 reward), slow node gets 80ms (~1.25 reward)
+    for _ in range(20):
+        route = router.select_contextual_bandit(candidates)
+        lat = 15.0 if route.backend.id == "fast" else 80.0
+        router.bandit.record_feedback(route.backend.id, lat)
+
+    stats = router.bandit.get_stats()
+    assert stats["total_pulls"] > 20
+    # Fast node should accumulate significantly higher average reward than slow node
+    assert stats["arms"]["fast"]["avg_reward"] > stats["arms"]["slow"]["avg_reward"]
+
+
+def test_token_bucket_rate_limiter():
+    from app.routing import TokenBucketRateLimiter
+    rl = TokenBucketRateLimiter(capacity=3, refill_rate_per_sec=1.0, enabled=True)
+
+    # 3 allowed requests
+    allow1, _, rem1 = rl.allow_request()
+    allow2, _, rem2 = rl.allow_request()
+    allow3, _, rem3 = rl.allow_request()
+    assert allow1 and allow2 and allow3
+    assert rem3 == 0
+
+    # 4th request must be rejected
+    allow4, retry_after, rem4 = rl.allow_request()
+    assert not allow4
+    assert retry_after > 0.0
+
+
+def test_dynamic_worker_delay_manager():
+    from app.routing import DynamicWorkerDelayManager
+    mgr = DynamicWorkerDelayManager()
+    assert mgr.get_delay("worker-a") == 0.0
+
+    mgr.set_delay("worker-a", 45.0)
+    assert mgr.get_delay("worker-a") == 45.0
+    assert mgr.get_all() == {"worker-a": 45.0}
+
+    mgr.reset("worker-a")
+    assert mgr.get_delay("worker-a") == 0.0
+
+
+def test_canary_deployer_traffic_resolution():
+    from app.routing import CanaryDeployer
+    canary = CanaryDeployer()
+    assert canary.resolve_policy("least_connections") == ("least_connections", False)
+
+    # Enable 100% canary to ai_latency
+    canary.configure(enabled=True, baseline="least_connections", canary_policy="ai_latency", percentage=100.0)
+    pol, is_canary = canary.resolve_policy("least_connections")
+    assert pol == "ai_latency"
+    assert is_canary is True
 

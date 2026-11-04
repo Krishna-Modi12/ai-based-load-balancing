@@ -88,3 +88,82 @@ def test_model_tournament_endpoint():
         assert "HistGradientBoostingRegressor" in algos
         assert "Ridge" in algos
 
+
+def test_prometheus_metrics_endpoint():
+    with TestClient(app) as client:
+        resp = client.get("/metrics")
+        assert resp.status_code == 200
+        text = resp.text
+        assert "http_requests_total" in text
+        assert "circuit_breaker_state" in text
+        assert "rate_limit_tokens_available" in text
+
+
+def test_bandit_arms_api():
+    with TestClient(app) as client:
+        resp = client.get("/api/v1/system/bandit/arms")
+        assert resp.status_code == 200
+        data = resp.json()
+        assert "total_pulls" in data
+        assert "arms" in data
+
+
+def test_worker_delay_api():
+    with TestClient(app) as client:
+        resp = client.post("/api/v1/system/workers/delay", json={"worker_name": "worker-a", "delay_ms": 50.0})
+        assert resp.status_code == 200
+        assert resp.json()["delays"]["worker-a"] == 50.0
+
+        # Reset
+        reset = client.post("/api/v1/system/workers/delay/reset")
+        assert reset.status_code == 200
+        assert reset.json()["delays"] == {}
+
+
+def test_rate_limiter_api():
+    with TestClient(app) as client:
+        status = client.get("/api/v1/system/ratelimit")
+        assert status.status_code == 200
+        assert "tokens_remaining" in status.json()
+
+        # Configure
+        conf = client.post("/api/v1/system/ratelimit", json={"enabled": False, "capacity": 100, "refill_rate": 50.0})
+        assert conf.status_code == 200
+        assert conf.json()["capacity"] == 100
+
+
+def test_canary_deployment_api():
+    with TestClient(app) as client:
+        status = client.get("/api/v1/system/canary")
+        assert status.status_code == 200
+        assert "canary_percentage" in status.json()
+
+        conf = client.post(
+            "/api/v1/system/canary",
+            json={"enabled": True, "baseline_policy": "least_connections", "canary_policy": "ai_latency", "canary_percentage": 25.0}
+        )
+        assert conf.status_code == 200
+        assert conf.json()["enabled"] is True
+        assert conf.json()["canary_percentage"] == 25.0
+
+        # Disable canary
+        client.post(
+            "/api/v1/system/canary",
+            json={"enabled": False, "baseline_policy": "least_connections", "canary_policy": "ai_latency", "canary_percentage": 0.0}
+        )
+
+
+def test_waterfall_trace_in_routing():
+    with TestClient(app) as client:
+        resp = client.get("/api/v1/route")
+        if resp.status_code == 200:
+            data = resp.json()
+            assert "waterfall" in data
+            wf = data["waterfall"]
+            assert "trace_id" in wf
+            assert "proxy_ingress_ms" in wf
+            assert "selection_ms" in wf
+            assert "upstream_http_ms" in wf
+            assert "db_persistence_ms" in wf
+            assert "total_roundtrip_ms" in wf
+

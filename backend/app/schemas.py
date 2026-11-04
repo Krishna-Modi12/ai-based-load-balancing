@@ -15,7 +15,34 @@ class BackendPatch(BaseModel):
 
 
 class PolicyUpdate(BaseModel):
-    policy: str = Field(pattern="^(round_robin|weighted_round_robin|least_connections|ai_latency|consistent_hash)$")
+    policy: str = Field(pattern="^(round_robin|weighted_round_robin|least_connections|ai_latency|consistent_hash|contextual_bandit)$")
+
+
+class WorkerDelayUpdate(BaseModel):
+    worker_name: str
+    delay_ms: float = Field(ge=0.0, le=5000.0)
+
+
+class RateLimitConfig(BaseModel):
+    enabled: bool = False
+    capacity: int = Field(default=60, ge=1, le=10000)
+    refill_rate: float = Field(default=20.0, gt=0.0)
+
+
+class CanaryConfig(BaseModel):
+    enabled: bool = False
+    baseline_policy: str = Field(default="least_connections", pattern="^(round_robin|weighted_round_robin|least_connections|ai_latency|consistent_hash|contextual_bandit)$")
+    canary_policy: str = Field(default="ai_latency", pattern="^(round_robin|weighted_round_robin|least_connections|ai_latency|consistent_hash|contextual_bandit)$")
+    canary_percentage: float = Field(default=20.0, ge=0.0, le=100.0)
+
+
+class WaterfallTrace(BaseModel):
+    trace_id: str
+    proxy_ingress_ms: float
+    selection_ms: float
+    upstream_http_ms: float
+    db_persistence_ms: float
+    total_roundtrip_ms: float
 
 
 class BackendOut(BaseModel):

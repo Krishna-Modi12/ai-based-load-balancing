@@ -14,7 +14,7 @@ import json
 import httpx
 from fastapi import Depends, FastAPI, Header, HTTPException, Query, Request
 from fastapi.middleware.cors import CORSMiddleware
-from fastapi.responses import JSONResponse, StreamingResponse
+from fastapi.responses import JSONResponse, PlainTextResponse, StreamingResponse
 from sqlalchemy import func, select
 from sqlalchemy.orm import Session
 
@@ -25,10 +25,11 @@ from .experiments import CANCEL_EVENTS, run_experiment_in_thread
 from .models import BackendNode, ExperimentMetric, ExperimentRun, ModelVersion, RoutingDecision, RoutingPolicy, TelemetrySample
 from .routing import Router
 from .schemas import (
-    BackendCreate, BackendDetail, BackendOut, BackendPatch, CdfPoint, ChaosInjectRequest,
-    CircuitBreakerOut, DecisionOut, ExperimentConfig, ExperimentDetail, ExperimentListItem,
-    ExperimentOut, ExperimentMetricOut, ModelTournamentOut, ModelVersionOut, PolicyOut,
-    PolicyUpdate, StressTestRequest, StressTestResult,
+    BackendCreate, BackendDetail, BackendOut, BackendPatch, CanaryConfig, CdfPoint,
+    ChaosInjectRequest, CircuitBreakerOut, DecisionOut, ExperimentConfig, ExperimentDetail,
+    ExperimentListItem, ExperimentOut, ExperimentMetricOut, ModelTournamentOut, ModelVersionOut,
+    PolicyOut, PolicyUpdate, RateLimitConfig, StressTestRequest, StressTestResult,
+    WorkerDelayUpdate,
 )
 from .services import collect_health, eligible_backends, feature_vector, latest_features
 
@@ -421,28 +422,53 @@ async def proxy_demo(
     session_key: str | None = Query(None),
     db: Session = Depends(get_db),
 ):
+    t0 = time.perf_counter()
+
+    # Rate Limiting Guard
+    allowed, retry_after, remaining = router.rate_limiter.allow_request()
+    if not allowed:
+        import math
+        raise HTTPException(
+            status_code=429,
+            detail=f"Rate limit exceeded. Try again in {retry_after} seconds.",
+            headers={"Retry-After": str(int(math.ceil(retry_after))), "X-RateLimit-Remaining": "0"},
+        )
+
     candidates = eligible_backends(db, settings)
-    if not candidates: raise HTTPException(503, "NO_HEALTHY_BACKENDS")
+    if not candidates:
+        raise HTTPException(503, "NO_HEALTHY_BACKENDS")
 
     # Resilience: filter through circuit breakers (outlier ejection)
     healthy_candidates, _ = router.circuit_breaker.filter_healthy(candidates)
     active_candidates = healthy_candidates if healthy_candidates else candidates
 
+    t_filter = time.perf_counter()
     features = {node.id: latest_features(db, node, request_class) for node in active_candidates}
     selection_start = time.perf_counter()
-    policy = _current_policy(db)
+
+    # Policy Resolution with Canary Support
+    configured_policy = _current_policy(db)
+    policy, is_canary = router.canary.resolve_policy(configured_policy)
     req_key = session_key or (request and request.headers.get("X-Session-ID")) or (request and getattr(request.state, "request_id", None)) or str(uuid.uuid4())
 
     if policy == "round_robin": route = router.select_round_robin(active_candidates)
     elif policy == "weighted_round_robin": route = router.select_weighted_round_robin(active_candidates)
     elif policy == "least_connections": route = router.select_least_connections(active_candidates)
     elif policy == "consistent_hash": route = router.select_consistent_hash(active_candidates, key=req_key)
+    elif policy == "contextual_bandit": route = router.select_contextual_bandit(active_candidates)
     else: route = router.select_ai(active_candidates, {key: feature_vector(value) for key, value in features.items()}, load_active_predictor(db))
 
-    ai_inference_latency = (time.perf_counter() - selection_start) * 1000 if policy == "ai_latency" else None
+    t_selected = time.perf_counter()
+    ai_inference_latency = (t_selected - selection_start) * 1000 if policy in {"ai_latency", "contextual_bandit"} else None
     request_id, start = str(uuid.uuid4()), time.perf_counter()
     router.inflight[route.backend.id] = router.inflight.get(route.backend.id, 0) + 1
     status, response_payload, failure = None, None, None
+
+    # Dynamic worker delay simulation
+    extra_delay = router.delays.get_delay(route.backend.name) or router.delays.get_delay(route.backend.id)
+    if extra_delay > 0:
+        await asyncio.sleep(extra_delay / 1000.0)
+
     try:
         async with httpx.AsyncClient(timeout=settings.proxy_timeout_seconds, follow_redirects=False) as client:
             response = await client.get(f"{route.backend.base_url}/demo", params={"request_class": request_class}, headers={"X-Request-ID": request_id})
@@ -451,21 +477,47 @@ async def proxy_demo(
         failure = type(error).__name__
     finally:
         router.inflight[route.backend.id] -= 1
-    elapsed = (time.perf_counter() - start) * 1000
+    t_upstream_end = time.perf_counter()
+    elapsed = (t_upstream_end - start) * 1000
 
-    # Record circuit breaker telemetry
+    # Record circuit breaker & bandit feedback telemetry
     if failure:
         router.circuit_breaker.record_failure(route.backend.id, is_slow=False, latency_ms=elapsed)
     else:
         router.circuit_breaker.record_success(route.backend.id, elapsed)
         if elapsed > router.circuit_breaker.slow_latency_threshold_ms:
             router.circuit_breaker.record_failure(route.backend.id, is_slow=True, latency_ms=elapsed)
+        if route.policy == "contextual_bandit":
+            router.bandit.record_feedback(route.backend.id, elapsed)
 
     decision = RoutingDecision(request_id=request_id, policy=route.policy, selected_backend_id=route.backend.id, model_version_id=route.model_version_id, predicted_latency_ms=route.predicted_latency_ms, actual_latency_ms=elapsed, ai_inference_latency_ms=ai_inference_latency, status_code=status, success=failure is None, request_class=request_class, fallback_reason=route.fallback_reason, failure_type=failure, features_json=features.get(route.backend.id))
     db.add(decision); db.commit()
+    t_db_end = time.perf_counter()
+
+    trace_id = uuid.uuid4().hex
+    waterfall = {
+        "trace_id": f"00-{trace_id}-01",
+        "proxy_ingress_ms": round((t_filter - t0) * 1000, 3),
+        "selection_ms": round((t_selected - t_filter) * 1000, 3),
+        "upstream_http_ms": round((t_upstream_end - t_selected) * 1000, 3),
+        "db_persistence_ms": round((t_db_end - t_upstream_end) * 1000, 3),
+        "total_roundtrip_ms": round((t_db_end - t0) * 1000, 3),
+        "is_canary": is_canary,
+    }
+
     if failure:
         raise HTTPException(502, "UPSTREAM_REQUEST_FAILED")
-    return {"request_id": request_id, "backend": route.backend.name, "policy": route.policy, "predicted_latency_ms": route.predicted_latency_ms, "actual_latency_ms": elapsed, "ai_inference_latency_ms": ai_inference_latency, "fallback_reason": route.fallback_reason, "upstream": response_payload}
+    return {
+        "request_id": request_id,
+        "backend": route.backend.name,
+        "policy": route.policy,
+        "predicted_latency_ms": route.predicted_latency_ms,
+        "actual_latency_ms": elapsed,
+        "ai_inference_latency_ms": ai_inference_latency,
+        "fallback_reason": route.fallback_reason,
+        "upstream": response_payload,
+        "waterfall": waterfall,
+    }
 
 
 @app.get("/api/v1/demo/request")
@@ -726,3 +778,90 @@ async def benchmark_stress_test(
         worker_distribution=worker_distribution,
         slow_worker_avoidance_rate=avoidance,
     )
+
+
+# ------------------------------------------------------------------------------
+# Advanced System Endpoints: Reinforcement Learning, Delays, Rate Limiting, Canary
+# ------------------------------------------------------------------------------
+
+
+@app.get("/api/v1/system/bandit/arms")
+def get_bandit_arms():
+    return router.bandit.get_stats()
+
+
+@app.get("/api/v1/system/workers/delays")
+def get_worker_delays():
+    return router.delays.get_all()
+
+
+@app.post("/api/v1/system/workers/delay")
+def set_worker_delay(payload: WorkerDelayUpdate):
+    router.delays.set_delay(payload.worker_name, payload.delay_ms)
+    return {"status": "updated", "delays": router.delays.get_all()}
+
+
+@app.post("/api/v1/system/workers/delay/reset")
+def reset_worker_delays():
+    router.delays.reset()
+    return {"status": "reset", "delays": router.delays.get_all()}
+
+
+@app.get("/api/v1/system/ratelimit")
+def get_ratelimit_status():
+    return router.rate_limiter.get_status()
+
+
+@app.post("/api/v1/system/ratelimit")
+def configure_ratelimit(payload: RateLimitConfig):
+    router.rate_limiter.configure(payload.enabled, payload.capacity, payload.refill_rate)
+    return router.rate_limiter.get_status()
+
+
+@app.get("/api/v1/system/canary")
+def get_canary_status():
+    return router.canary.get_status()
+
+
+@app.post("/api/v1/system/canary")
+def configure_canary(payload: CanaryConfig):
+    router.canary.configure(payload.enabled, payload.baseline_policy, payload.canary_policy, payload.canary_percentage)
+    return router.canary.get_status()
+
+
+@app.get("/metrics")
+def prometheus_metrics(db: Session = Depends(get_db)):
+    lines = [
+        "# HELP http_requests_total Total number of routing decisions logged by policy and status",
+        "# TYPE http_requests_total counter",
+    ]
+    decisions = list(db.scalars(select(RoutingDecision).order_by(RoutingDecision.decided_at.desc()).limit(500)))
+    counts: dict[tuple[str, str, int], int] = {}
+    for d in decisions:
+        key = (d.policy, d.selected_backend_id or "none", d.status_code or 200)
+        counts[key] = counts.get(key, 0) + 1
+
+    for (pol, b_id, status), count in counts.items():
+        lines.append(f'http_requests_total{{policy="{pol}",backend="{b_id}",status="{status}"}} {count}')
+
+    lines.append("")
+    lines.append("# HELP circuit_breaker_state Circuit breaker state (0=CLOSED, 1=HALF_OPEN, 2=OPEN)")
+    lines.append("# TYPE circuit_breaker_state gauge")
+    cb_status = router.circuit_breaker.get_all_statuses()
+    for b_id, s in cb_status.items():
+        val = 0 if s["state"] == "CLOSED" else (1 if s["state"] == "HALF_OPEN" else 2)
+        lines.append(f'circuit_breaker_state{{backend="{b_id}"}} {val}')
+
+    lines.append("")
+    lines.append("# HELP rate_limit_tokens_available Available tokens in rate limiter bucket")
+    lines.append("# TYPE rate_limit_tokens_available gauge")
+    rl = router.rate_limiter.get_status()
+    lines.append(f'rate_limit_tokens_available {rl["tokens_remaining"]}')
+
+    lines.append("")
+    lines.append("# HELP active_connections Active TCP connections per backend")
+    lines.append("# TYPE active_connections gauge")
+    for b_id, count in router.inflight.items():
+        lines.append(f'active_connections{{backend="{b_id}"}} {count}')
+
+    return PlainTextResponse("\n".join(lines) + "\n", media_type="text/plain; version=0.0.4")

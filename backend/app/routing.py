@@ -159,11 +159,193 @@ class Predictor(Protocol):
     def predict(self, features: list[float]) -> float: ...
 
 
+class ContextualBanditRouter:
+    """
+    Online Reinforcement Learning using Upper Confidence Bound (UCB1).
+    Balances exploration of uncertain workers with exploitation of fast workers.
+    """
+
+    def __init__(self, c: float = 1.414) -> None:
+        self.c = c
+        self.pulls: dict[str, int] = {}
+        self.total_pulls: int = 0
+        self.total_reward: dict[str, float] = {}
+        self.avg_reward: dict[str, float] = {}
+        self.last_latency: dict[str, float] = {}
+
+    def select(self, candidates: list[BackendNode]) -> SelectedRoute:
+        self.total_pulls += 1
+        # Warmup: try each candidate arm at least once
+        for b in candidates:
+            if self.pulls.get(b.id, 0) == 0:
+                return SelectedRoute(b, "contextual_bandit", predicted_latency_ms=self.last_latency.get(b.id, 25.0))
+
+        # UCB1 scoring: avg_reward + c * sqrt(ln(t) / n_i)
+        best_score = -float("inf")
+        best_node = candidates[0]
+        for b in candidates:
+            n_i = max(1, self.pulls.get(b.id, 1))
+            mu_i = self.avg_reward.get(b.id, 1.0)
+            bonus = self.c * math.sqrt(math.log(max(1, self.total_pulls)) / n_i)
+            score = mu_i + bonus
+            if score > best_score:
+                best_score = score
+                best_node = b
+
+        return SelectedRoute(best_node, "contextual_bandit", predicted_latency_ms=self.last_latency.get(best_node.id, 25.0))
+
+    def record_feedback(self, backend_id: str, latency_ms: float) -> None:
+        # Inverse latency reward: 100 / max(1.0, latency_ms)
+        reward = 100.0 / max(1.0, latency_ms)
+        self.pulls[backend_id] = self.pulls.get(backend_id, 0) + 1
+        self.total_reward[backend_id] = self.total_reward.get(backend_id, 0.0) + reward
+        self.avg_reward[backend_id] = self.total_reward[backend_id] / self.pulls[backend_id]
+        self.last_latency[backend_id] = latency_ms
+
+    def get_stats(self) -> dict:
+        return {
+            "total_pulls": self.total_pulls,
+            "arms": {
+                bid: {
+                    "pulls": self.pulls.get(bid, 0),
+                    "avg_reward": round(self.avg_reward.get(bid, 0.0), 3),
+                    "last_latency_ms": round(self.last_latency.get(bid, 0.0), 2),
+                }
+                for bid in self.pulls
+            },
+        }
+
+
+class DynamicWorkerDelayManager:
+    """Dynamic latency override registry for live chaos & hardware delay tuning."""
+
+    def __init__(self) -> None:
+        self.delays: dict[str, float] = {}
+
+    def set_delay(self, name_or_id: str, delay_ms: float) -> None:
+        self.delays[name_or_id] = max(0.0, delay_ms)
+
+    def get_delay(self, name_or_id: str, default_ms: float = 0.0) -> float:
+        return self.delays.get(name_or_id, default_ms)
+
+    def reset(self, name_or_id: str | None = None) -> None:
+        if name_or_id:
+            self.delays.pop(name_or_id, None)
+        else:
+            self.delays.clear()
+
+    def get_all(self) -> dict[str, float]:
+        return dict(self.delays)
+
+
+class TokenBucketRateLimiter:
+    """RFC 6585 Token Bucket rate limiter with configurable capacity and refill rate."""
+
+    def __init__(self, capacity: int = 60, refill_rate_per_sec: float = 20.0, enabled: bool = False) -> None:
+        self.capacity = capacity
+        self.refill_rate = refill_rate_per_sec
+        self.tokens = float(capacity)
+        self.last_refill = time.time()
+        self.enabled = enabled
+
+    def configure(self, enabled: bool, capacity: int, refill_rate: float) -> None:
+        self.enabled = enabled
+        self.capacity = capacity
+        self.refill_rate = refill_rate
+        self.tokens = min(self.tokens, float(capacity))
+
+    def allow_request(self) -> tuple[bool, float, int]:
+        if not self.enabled:
+            return True, 0.0, int(self.capacity)
+        now = time.time()
+        delta = now - self.last_refill
+        self.tokens = min(float(self.capacity), self.tokens + delta * self.refill_rate)
+        self.last_refill = now
+
+        if self.tokens >= 1.0:
+            self.tokens -= 1.0
+            return True, 0.0, int(self.tokens)
+        else:
+            retry_after = (1.0 - self.tokens) / max(0.1, self.refill_rate)
+            return False, round(retry_after, 2), 0
+
+    def get_status(self) -> dict:
+        now = time.time()
+        delta = now - self.last_refill
+        cur_tokens = min(float(self.capacity), self.tokens + delta * self.refill_rate)
+        return {
+            "enabled": self.enabled,
+            "capacity": self.capacity,
+            "refill_rate_per_sec": self.refill_rate,
+            "tokens_remaining": round(cur_tokens, 1),
+        }
+
+
+class CanaryDeployer:
+    """Canary traffic splitting between baseline and candidate routing policies."""
+
+    def __init__(self) -> None:
+        import random
+        self.enabled = False
+        self.baseline_policy = "least_connections"
+        self.canary_policy = "ai_latency"
+        self.canary_percentage = 20.0
+
+    def configure(
+        self,
+        enabled: bool,
+        baseline_policy: str | None = None,
+        canary_policy: str | None = None,
+        canary_percentage: float | None = None,
+        baseline: str | None = None,
+        canary: str | None = None,
+        percentage: float | None = None,
+    ) -> None:
+        self.enabled = enabled
+        if baseline_policy is not None:
+            self.baseline_policy = baseline_policy
+        elif baseline is not None:
+            self.baseline_policy = baseline
+
+        if canary_policy is not None:
+            self.canary_policy = canary_policy
+        elif canary is not None:
+            self.canary_policy = canary
+
+        pct = canary_percentage if canary_percentage is not None else percentage
+        if pct is not None:
+            self.canary_percentage = max(0.0, min(100.0, pct))
+
+    def resolve_policy(self, active_policy: str) -> tuple[str, bool]:
+        if not self.enabled:
+            return active_policy, False
+        import random
+        roll = random.uniform(0, 100)
+        if roll < self.canary_percentage:
+            return self.canary_policy, True
+        return self.baseline_policy, False
+
+    def get_status(self) -> dict:
+        return {
+            "enabled": self.enabled,
+            "baseline_policy": self.baseline_policy,
+            "canary_policy": self.canary_policy,
+            "canary_percentage": self.canary_percentage,
+        }
+
+
 class Router:
     def __init__(self) -> None:
         self._cursor = 0
         self.inflight: dict[str, int] = {}
         self.circuit_breaker = CircuitBreakerManager()
+        self.bandit = ContextualBanditRouter()
+        self.delays = DynamicWorkerDelayManager()
+        self.rate_limiter = TokenBucketRateLimiter()
+        self.canary = CanaryDeployer()
+
+    def select_contextual_bandit(self, candidates: list[BackendNode]) -> SelectedRoute:
+        return self.bandit.select(candidates)
 
     def select_round_robin(self, candidates: list[BackendNode]) -> SelectedRoute:
         backend = candidates[self._cursor % len(candidates)]
