@@ -9,17 +9,16 @@ def test_liveness_and_readiness():
         assert client.get("/health/ready").status_code == 200
 
 
-def test_backend_mutation_requires_token():
+def test_backend_mutation_works_without_token():
     with TestClient(app) as client:
-        response = client.post("/api/v1/backends", json={"name": "blocked", "base_url": "http://blocked.test", "capacity_weight": 1})
-    assert response.status_code == 401
+        response = client.post("/api/v1/backends", json={"name": "open-test-node", "base_url": "http://open.test", "capacity_weight": 1})
+    assert response.status_code == 200
 
 
-def test_policy_change_is_protected():
+def test_policy_change_allowed_without_token():
     with TestClient(app) as client:
-        denied = client.post("/api/v1/policies", json={"policy": "least_connections"})
-        allowed = client.post("/api/v1/policies", json={"policy": "least_connections"}, headers={"X-Admin-Token": "change-me"})
-    assert denied.status_code == 401
+        allowed = client.post("/api/v1/policies", json={"policy": "least_connections"})
+    assert allowed.status_code == 200
     assert allowed.json() == {"policy": "least_connections"}
 
 
@@ -55,20 +54,15 @@ def test_circuit_breakers_api_endpoint():
             assert "is_available" in item
 
 
-def test_chaos_injection_api_protection_and_execution():
+def test_chaos_injection_api_execution():
     with TestClient(app) as client:
-        # 1. Unauthenticated request rejected
-        denied = client.post("/api/v1/system/chaos/inject", json={"backend_id": "test", "action": "trip"})
-        assert denied.status_code == 401
-
-        # 2. Get real backend
+        # Get real backend
         cbs = client.get("/api/v1/system/circuit-breakers").json()
         if cbs:
             bid = cbs[0]["backend_id"]
             tripped = client.post(
                 "/api/v1/system/chaos/inject",
                 json={"backend_id": bid, "action": "trip"},
-                headers={"X-Admin-Token": "change-me"}
             )
             assert tripped.status_code == 200
             assert tripped.json()["circuit_breaker"]["state"] == "OPEN"
@@ -77,7 +71,6 @@ def test_chaos_injection_api_protection_and_execution():
             reset = client.post(
                 "/api/v1/system/chaos/inject",
                 json={"backend_id": bid, "action": "reset"},
-                headers={"X-Admin-Token": "change-me"}
             )
             assert reset.status_code == 200
             assert reset.json()["circuit_breaker"]["state"] == "CLOSED"

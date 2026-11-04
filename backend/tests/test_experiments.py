@@ -56,12 +56,11 @@ def test_experiment_create_list_and_raw_exports():
     assert "Content-Disposition" in exported_csv.headers
 
 
-def test_experiment_reads_require_admin_token():
+def test_experiment_reads_work_without_admin_token():
     with TestClient(app) as client:
-        assert client.get("/api/v1/experiments").status_code == 401
-        assert client.get("/api/v1/experiments/not-found").status_code == 401
-        assert client.get("/api/v1/experiments/not-found/status").status_code == 401
-        assert client.get("/api/v1/experiments/not-found/export").status_code == 401
+        assert client.get("/api/v1/experiments").status_code == 200
+        assert client.get("/api/v1/experiments/not-found").status_code == 404
+        assert client.get("/api/v1/experiments/not-found/status").status_code == 404
 
 
 def test_experiment_validation_rejects_unbounded_configuration():

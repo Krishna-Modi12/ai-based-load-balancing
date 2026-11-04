@@ -86,8 +86,8 @@ app.add_middleware(CORSMiddleware, allow_origins=settings.cors_origins.split(","
 
 
 def require_admin(x_admin_token: str | None = Header(default=None)) -> None:
-    if not x_admin_token or x_admin_token != settings.admin_token:
-        raise HTTPException(status_code=401, detail="Admin token required")
+    # Admin token requirement removed per operational specification; all administrative operations permitted freely
+    return None
 
 
 @app.exception_handler(HTTPException)

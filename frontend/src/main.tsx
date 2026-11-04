@@ -8,7 +8,6 @@ import {
   Zap,
   Play,
   Pause,
-  Key,
   CheckCircle2,
   AlertTriangle,
   RotateCcw,
@@ -26,8 +25,6 @@ import {
   HelpCircle,
   Sliders,
   Send,
-  Eye,
-  EyeOff,
   Network,
   GitBranch,
   ChevronDown,
@@ -204,10 +201,7 @@ type Toast = {
 
 const api = import.meta.env.VITE_API_BASE_URL || "";
 
-const getHeaders = (adminToken: string): Record<string, string> =>
-  adminToken
-    ? { "X-Admin-Token": adminToken, "Content-Type": "application/json" }
-    : { "Content-Type": "application/json" };
+const defaultHeaders: Record<string, string> = { "Content-Type": "application/json" };
 
 function formatTime(isoString?: string | null): string {
   if (!isoString) return "—";
@@ -239,7 +233,7 @@ function extractErrorMessage(body: any, label: string): string {
 function Sparkline({ values, color = "#06b6d4" }: { values: number[]; color?: string }) {
   if (!values || values.length === 0) {
     return (
-      <div className="h-8 flex items-center text-[10px] text-slate-500 font-mono">
+      <div className="h-8 flex items-center text-xs text-content-muted font-mono">
         Observing...
       </div>
     );
@@ -314,10 +308,8 @@ function App() {
   const [error, setError] = useState("");
   const [notice, setNotice] = useState("");
   const [isRefreshing, setIsRefreshing] = useState(false);
-  const [adminToken, setAdminToken] = useState("");
   const [activeTab, setActiveTab] = useState<"diagram" | "shootout" | "tournament" | "resilience" | "live" | "matrix" | "viva" | "guide" | "dossier">("diagram");
   const [searchFilter, setSearchFilter] = useState("");
-  const [tokenVisible, setTokenVisible] = useState(false);
   const [isAutoRefresh, setIsAutoRefresh] = useState(true);
   const [showBeginnerGuide, setShowBeginnerGuide] = useState(false);
 
@@ -401,7 +393,7 @@ function App() {
         fetch(`${api}/api/v1/backends`),
         fetch(`${api}/api/v1/decisions?limit=100`),
         fetch(`${api}/api/v1/system/status`),
-        fetch(`${api}/api/v1/experiments`, { headers: getHeaders(adminToken) }),
+        fetch(`${api}/api/v1/experiments`, { headers: defaultHeaders }),
         fetch(`${api}/api/v1/system/circuit-breakers`).catch(() => ({ ok: false })),
       ]);
 
@@ -451,7 +443,7 @@ function App() {
     try {
       const res = await fetch(`${api}/api/v1/system/chaos/inject`, {
         method: "POST",
-        headers: getHeaders(adminToken),
+        headers: defaultHeaders,
         body: JSON.stringify({ backend_id: backendId, action: actionName }),
       });
       const data = await res.json();
@@ -487,7 +479,7 @@ function App() {
     try {
       const res = await fetch(`${api}/api/v1/models/tournament/activate?algorithm_name=${encodeURIComponent(algorithmName)}`, {
         method: "POST",
-        headers: getHeaders(adminToken),
+        headers: defaultHeaders,
       });
       const data = await res.json();
       if (!res.ok) throw new Error(data.detail || "Model activation failed");
@@ -534,7 +526,7 @@ function App() {
     try {
       const response = await fetch(`${api}${url}`, {
         ...options,
-        headers: { ...getHeaders(adminToken), ...(options.headers || {}) },
+        headers: { ...defaultHeaders, ...(options.headers || {}) },
       });
       const body = await response.json().catch(() => ({}));
       if (!response.ok) {
@@ -580,7 +572,7 @@ function App() {
     try {
       const resp = await fetch(`${api}/api/v1/models/train`, {
         method: "POST",
-        headers: getHeaders(adminToken),
+        headers: defaultHeaders,
       });
       const body = await resp.json();
       if (!resp.ok) {
@@ -661,7 +653,7 @@ function App() {
         `${api}/api/v1/benchmark/shootout?rounds=${shootoutRounds}&request_class=${shootoutClass}`,
         {
           method: "POST",
-          headers: getHeaders(adminToken),
+          headers: defaultHeaders,
         }
       );
       if (!resp.ok) {
@@ -743,7 +735,7 @@ function App() {
   const exportExperimentsJSON = async () => {
     try {
       const response = await fetch(`${api}/api/v1/experiments`, {
-        headers: getHeaders(adminToken),
+        headers: defaultHeaders,
       });
       const body = await response.json().catch(() => ({}));
       if (!response.ok) throw new Error(extractErrorMessage(body, "Experiment export"));
@@ -786,10 +778,6 @@ function App() {
     }, 4000);
     return () => clearInterval(interval);
   }, [isAutoRefresh]);
-
-  useEffect(() => {
-    if (adminToken) refresh(true);
-  }, [adminToken]);
 
   // Accessibility: Dismiss modals on Escape key press (fixing-accessibility)
   useEffect(() => {
@@ -917,7 +905,7 @@ function App() {
   });
 
   return (
-    <div className="min-h-dvh bg-surface-lowest text-slate-100 flex flex-col font-sans selection:bg-primary selection:text-slate-950">
+    <div className="min-h-dvh bg-surface-lowest text-content-primary flex flex-col font-sans selection:bg-primary selection:text-surface-deep">
       {/* ---------------------------------------------------- */}
       {/* FLOATING TOAST NOTIFICATIONS                         */}
       {/* ---------------------------------------------------- */}
@@ -927,12 +915,12 @@ function App() {
             key={t.id}
             className={`pointer-events-auto p-3 rounded-xl border shadow-xl flex items-start justify-between gap-3 animate-toast-in ${
               t.type === "success"
-                ? "bg-slate-900/95 border-secondary text-slate-100"
+                ? "bg-surface-card/95 border-secondary text-content-primary"
                 : t.type === "error"
-                ? "bg-slate-900/95 border-error text-slate-100"
+                ? "bg-surface-card/95 border-error text-content-primary"
                 : t.type === "warning"
-                ? "bg-slate-900/95 border-amber text-slate-100"
-                : "bg-slate-900/95 border-primary text-slate-100"
+                ? "bg-surface-card/95 border-amber text-content-primary"
+                : "bg-surface-card/95 border-primary text-content-primary"
             }`}
           >
             <div className="flex items-start gap-2.5">
@@ -947,7 +935,7 @@ function App() {
               )}
               <div>
                 <h5 className="font-mono text-xs font-bold">{t.title}</h5>
-                <p className="text-[11px] text-slate-300 mt-0.5 font-sans leading-tight">{t.message}</p>
+                <p className="text-xs text-content-secondary mt-0.5 font-sans leading-tight">{t.message}</p>
               </div>
             </div>
             <button
@@ -974,11 +962,11 @@ function App() {
               <h1 className="text-sm font-medium text-content-primary">
                 Layer-7 Adaptive Load Balancer
               </h1>
-              <span className="text-[11px] font-mono px-1.5 py-0.5 bg-surface-raised text-content-secondary border border-border-subtle rounded">
+              <span className="text-xs font-mono px-1.5 py-0.5 bg-surface-raised text-content-secondary border border-border-subtle rounded">
                 L7 Proxy
               </span>
             </div>
-            <p className="text-[11px] font-mono text-content-muted">
+            <p className="text-xs font-mono text-content-muted">
               Predictive latency routing for heterogeneous clusters
             </p>
           </div>
@@ -986,30 +974,6 @@ function App() {
 
         {/* Global Controls */}
         <div className="flex items-center gap-2.5">
-          {/* Admin Token Input */}
-          <div className="flex items-center gap-1.5 bg-surface-card border border-border-subtle rounded-md px-2.5 py-1">
-            <Key className="w-3.5 h-3.5 text-content-muted" />
-            <label htmlFor="admin-token" className="sr-only">Admin token</label>
-            <input
-              id="admin-token"
-              name="admin-token"
-              autoComplete="off"
-              type={tokenVisible ? "text" : "password"}
-              placeholder="Admin token..."
-              value={adminToken}
-              onChange={(e) => setAdminToken(e.target.value)}
-              className="bg-transparent border-none text-xs font-mono text-content-primary placeholder-content-muted focus:outline-none w-28 sm:w-36"
-            />
-            <button
-              type="button"
-              onClick={() => setTokenVisible(!tokenVisible)}
-              className="text-content-muted hover:text-content-primary transition-colors"
-              title={tokenVisible ? "Hide token" : "Show token"}
-              aria-label={tokenVisible ? "Hide admin token" : "Show admin token"}
-            >
-              {tokenVisible ? <EyeOff className="w-3.5 h-3.5" /> : <Eye className="w-3.5 h-3.5" />}
-            </button>
-          </div>
 
           {/* Quick Retrain Button */}
           <button
@@ -1074,7 +1038,7 @@ function App() {
           </div>
           <button
             onClick={triggerHealthChecks}
-            className="px-2.5 py-1 bg-amber text-slate-950 font-bold rounded hover:bg-amber-light transition-colors text-[11px]"
+            className="px-2.5 py-1 bg-amber text-surface-deep font-bold rounded hover:bg-amber-light transition-colors text-xs"
           >
             Force Probe Now
           </button>
@@ -1119,7 +1083,7 @@ function App() {
               </div>
               <div className="w-full bg-surface-raised h-1.5 rounded-full mt-2 overflow-hidden">
                 <div
-                  className="bg-secondary h-full rounded-full transition-all duration-300"
+                  className="bg-secondary h-full rounded-full transition-[width] duration-300"
                   style={{ width: `${successRate}%` }}
                 />
               </div>
@@ -1181,7 +1145,7 @@ function App() {
         {/* ======================================================== */}
         {/* BEGINNER EXPLAINER PANEL (COLLAPSIBLE)                   */}
         {/* ======================================================== */}
-        <section className="bg-surface border border-border-subtle rounded-xl overflow-hidden transition-all">
+        <section className="bg-surface border border-border-subtle rounded-xl overflow-hidden transition-colors duration-150">
           <button
             onClick={() => setShowBeginnerGuide(!showBeginnerGuide)}
             className="w-full px-5 py-3 flex items-center justify-between text-left hover:bg-surface-high/40 transition-colors"
@@ -1192,17 +1156,17 @@ function App() {
                 Load balancing principles: heterogeneous cluster routing
               </span>
             </div>
-            <div className="flex items-center gap-2 text-xs font-mono text-slate-400">
+            <div className="flex items-center gap-2 text-xs font-mono text-content-secondary">
               <span>{showBeginnerGuide ? "Hide Guide" : "System overview"}</span>
               {showBeginnerGuide ? <ChevronUp className="w-4 h-4" /> : <ChevronDown className="w-4 h-4" />}
             </div>
           </button>
 
           {showBeginnerGuide && (
-            <div className="p-5 border-t border-border-subtle bg-surface-low grid grid-cols-1 md:grid-cols-3 gap-5 text-xs text-slate-300 font-sans leading-relaxed">
+            <div className="p-5 border-t border-border-subtle bg-surface-low grid grid-cols-1 md:grid-cols-3 gap-5 text-xs text-content-secondary font-sans leading-relaxed">
               <div className="p-4 bg-surface rounded-lg border border-border-subtle">
                 <div className="flex items-center gap-2 text-primary font-mono font-bold mb-2">
-                  <span className="w-5 h-5 rounded-full bg-primary/20 flex items-center justify-center text-[10px]">1</span>
+                  <span className="w-5 h-5 rounded-full bg-primary/20 flex items-center justify-center text-xs">1</span>
                   <span>The Real-World Problem</span>
                 </div>
                 <p>
@@ -1212,7 +1176,7 @@ function App() {
 
               <div className="p-4 bg-surface rounded-lg border border-border-subtle">
                 <div className="flex items-center gap-2 text-amber font-mono font-bold mb-2">
-                  <span className="w-5 h-5 rounded-full bg-amber/20 flex items-center justify-center text-[10px]">2</span>
+                  <span className="w-5 h-5 rounded-full bg-amber/20 flex items-center justify-center text-xs">2</span>
                   <span>Why Round Robin Fails</span>
                 </div>
                 <p>
@@ -1222,7 +1186,7 @@ function App() {
 
               <div className="p-4 bg-surface rounded-lg border border-border-subtle">
                 <div className="flex items-center gap-2 text-secondary font-mono font-bold mb-2">
-                  <span className="w-5 h-5 rounded-full bg-secondary/20 flex items-center justify-center text-[10px]">3</span>
+                  <span className="w-5 h-5 rounded-full bg-secondary/20 flex items-center justify-center text-xs">3</span>
                   <span>How Our AI Fixes It</span>
                 </div>
                 <p>
@@ -1255,7 +1219,7 @@ function App() {
               onClick={() => setIsSimulatorRunning(!isSimulatorRunning)}
               className={`px-3 py-1.5 rounded-md font-mono text-xs font-medium transition-colors flex items-center gap-2 ${
                 isSimulatorRunning
-                  ? "bg-amber text-slate-950 font-bold"
+                  ? "bg-amber text-surface-deep font-bold"
                   : "bg-surface-raised hover:bg-surface-overlay text-content-primary border border-border-subtle surface-raised-highlight"
               }`}
             >
@@ -1284,7 +1248,7 @@ function App() {
                     }`}
                   >
                     <span className="capitalize">{cls}</span>
-                    <span className="text-[10px] text-content-muted mt-0.5">
+                    <span className="text-xs text-content-muted mt-0.5">
                       {cls === "light" ? "5ms CPU" : cls === "normal" ? "15ms CPU" : "40ms CPU"}
                     </span>
                   </button>
@@ -1326,7 +1290,7 @@ function App() {
                 </button>
               </div>
               {trafficBatchProgress && (
-                <p className="text-[11px] font-mono text-content-secondary mt-1.5">
+                <p className="text-xs font-mono text-content-secondary mt-1.5">
                   {trafficBatchProgress}
                 </p>
               )}
@@ -1400,7 +1364,7 @@ function App() {
                   <strong className="text-secondary tabular-nums">{lastResult.actual_latency_ms?.toFixed(1)}ms</strong>
                 </span>
                 {lastResult.ai_inference_latency_ms !== null && lastResult.ai_inference_latency_ms !== undefined && (
-                  <span className="text-content-muted text-[10px] tabular-nums">
+                  <span className="text-content-muted text-xs tabular-nums">
                     (Inference: {lastResult.ai_inference_latency_ms.toFixed(2)}ms)
                   </span>
                 )}
@@ -1441,7 +1405,7 @@ function App() {
                     Deterministic
                   </span>
                   {status.policy === "round_robin" && (
-                    <span className="px-1.5 py-0.5 bg-secondary/15 text-secondary border border-secondary/30 font-mono text-[10px] font-medium rounded">
+                    <span className="px-1.5 py-0.5 bg-secondary/15 text-secondary border border-secondary/30 font-mono text-xs font-medium rounded">
                       Active
                     </span>
                   )}
@@ -1450,7 +1414,7 @@ function App() {
                 <p className="text-xs text-content-secondary mt-2 leading-relaxed font-sans">
                   Cycles evenly across nodes (A &rarr; B &rarr; C). Disregards worker load, CPU spikes, or differing response speeds.
                 </p>
-                <div className="mt-3 p-2 bg-surface-card border border-border-subtle rounded-md text-[11px] text-content-secondary font-sans">
+                <div className="mt-3 p-2 bg-surface-card border border-border-subtle rounded-md text-xs text-content-secondary font-sans">
                   <strong>Application:</strong> Homogeneous clusters with identical nodes.
                 </div>
               </div>
@@ -1475,7 +1439,7 @@ function App() {
                     Proportional
                   </span>
                   {status.policy === "weighted_round_robin" && (
-                    <span className="px-1.5 py-0.5 bg-secondary/15 text-secondary border border-secondary/30 font-mono text-[10px] font-medium rounded">
+                    <span className="px-1.5 py-0.5 bg-secondary/15 text-secondary border border-secondary/30 font-mono text-xs font-medium rounded">
                       Active
                     </span>
                   )}
@@ -1484,7 +1448,7 @@ function App() {
                 <p className="text-xs text-content-secondary mt-2 leading-relaxed font-sans">
                   Allocates requests proportional to static capacity weights (Worker A = 2x, B = 1x, C = 1x). Unresponsive to dynamic execution delays.
                 </p>
-                <div className="mt-3 p-2 bg-surface-card border border-border-subtle rounded-md text-[11px] text-content-secondary font-sans">
+                <div className="mt-3 p-2 bg-surface-card border border-border-subtle rounded-md text-xs text-content-secondary font-sans">
                   <strong>Application:</strong> Static hardware tiers without dynamic latency variance.
                 </div>
               </div>
@@ -1509,7 +1473,7 @@ function App() {
                     Load-aware
                   </span>
                   {status.policy === "least_connections" && (
-                    <span className="px-1.5 py-0.5 bg-secondary/15 text-secondary border border-secondary/30 font-mono text-[10px] font-medium rounded">
+                    <span className="px-1.5 py-0.5 bg-secondary/15 text-secondary border border-secondary/30 font-mono text-xs font-medium rounded">
                       Active
                     </span>
                   )}
@@ -1518,7 +1482,7 @@ function App() {
                 <p className="text-xs text-content-secondary mt-2 leading-relaxed font-sans">
                   Sends traffic to whichever worker has the fewest active in-flight requests. Balances queue accumulation dynamically.
                 </p>
-                <div className="mt-3 p-2 bg-surface-card border border-border-subtle rounded-md text-[11px] text-content-secondary font-sans">
+                <div className="mt-3 p-2 bg-surface-card border border-border-subtle rounded-md text-xs text-content-secondary font-sans">
                   <strong>Application:</strong> Long transactions, WebSockets, streaming endpoints.
                 </div>
               </div>
@@ -1543,7 +1507,7 @@ function App() {
                     Ring hash
                   </span>
                   {status.policy === "consistent_hash" && (
-                    <span className="px-1.5 py-0.5 bg-secondary/15 text-secondary border border-secondary/30 font-mono text-[10px] font-medium rounded">
+                    <span className="px-1.5 py-0.5 bg-secondary/15 text-secondary border border-secondary/30 font-mono text-xs font-medium rounded">
                       Active
                     </span>
                   )}
@@ -1555,7 +1519,7 @@ function App() {
                 <p className="text-xs text-content-secondary mt-2 leading-relaxed font-sans">
                   32-bit MD5 ring with 50 virtual replicas per capacity weight. Preserves strict session affinity and cache locality.
                 </p>
-                <div className="mt-3 p-2 bg-surface-card border border-border-subtle rounded-md text-[11px] text-content-secondary font-sans">
+                <div className="mt-3 p-2 bg-surface-card border border-border-subtle rounded-md text-xs text-content-secondary font-sans">
                   <strong>Application:</strong> Distributed caching (Redis) and sticky user sessions.
                 </div>
               </div>
@@ -1580,7 +1544,7 @@ function App() {
                     Predictive
                   </span>
                   {status.policy === "ai_latency" && (
-                    <span className="px-1.5 py-0.5 bg-secondary/15 text-secondary border border-secondary/30 font-mono text-[10px] font-medium rounded">
+                    <span className="px-1.5 py-0.5 bg-secondary/15 text-secondary border border-secondary/30 font-mono text-xs font-medium rounded">
                       Active
                     </span>
                   )}
@@ -1592,7 +1556,7 @@ function App() {
                 <p className="text-xs text-content-secondary mt-2 leading-relaxed font-sans">
                   Scikit-Learn Random Forest predicts exact completion latency from 8 live telemetric features. Actively steers around slow nodes.
                 </p>
-                <div className="mt-3 p-2 bg-surface-card border border-border-subtle rounded-md text-[11px] text-content-secondary font-sans">
+                <div className="mt-3 p-2 bg-surface-card border border-border-subtle rounded-md text-xs text-content-secondary font-sans">
                   <strong>Application:</strong> Heterogeneous clusters, straggler avoidance, tail SLA.
                 </div>
               </div>
@@ -1637,7 +1601,7 @@ function App() {
         {/* ======================================================== */}
         <section className="bg-surface border border-border-subtle rounded-xl p-4 flex flex-col gap-2.5">
           <div className="flex flex-col sm:flex-row sm:items-center justify-between text-xs font-mono gap-1">
-            <span className="text-slate-300 font-bold uppercase flex items-center gap-2">
+            <span className="text-content-secondary font-bold uppercase flex items-center gap-2">
               <Gauge className="w-4 h-4 text-primary" />
               Cluster traffic allocation
             </span>
@@ -1647,22 +1611,22 @@ function App() {
           </div>
           <div className="w-full h-3.5 bg-surface-highest rounded-full overflow-hidden flex">
             <div
-              className="bg-primary h-full transition-all duration-500"
+              className="bg-primary h-full transition-[width] duration-500"
               style={{ width: `${trafficShare.aPct}%` }}
               title={`Worker A: ${trafficShare.aPct}%`}
             />
             <div
-              className="bg-amber h-full transition-all duration-500"
+              className="bg-amber h-full transition-[width] duration-500"
               style={{ width: `${trafficShare.bPct}%` }}
               title={`Worker B (Straggler): ${trafficShare.bPct}%`}
             />
             <div
-              className="bg-tertiary h-full transition-all duration-500"
+              className="bg-tertiary h-full transition-[width] duration-500"
               style={{ width: `${trafficShare.cPct}%` }}
               title={`Worker C: ${trafficShare.cPct}%`}
             />
           </div>
-          <div className="flex items-center justify-between text-[11px] font-mono text-slate-400">
+          <div className="flex items-center justify-between text-xs font-mono text-content-secondary">
             <div className="flex items-center gap-1.5">
               <span className="w-2.5 h-2.5 rounded-full bg-primary" />
               <span>Worker A (Fast, 15ms): <strong>{trafficShare.aPct}%</strong> ({trafficShare.counts["worker-a"]} reqs)</span>
@@ -1686,17 +1650,17 @@ function App() {
             <div>
               <div className="flex items-center gap-2">
                 <Server className="w-4 h-4 text-primary" />
-                <h2 className="font-mono text-sm font-bold tracking-wide uppercase text-slate-100 text-balance">
+                <h2 className="font-mono text-sm font-bold tracking-wide uppercase text-content-primary text-balance">
                   Worker fleet telemetry
                 </h2>
               </div>
-              <p className="text-xs text-slate-400 mt-0.5 text-pretty">
+              <p className="text-xs text-content-secondary mt-0.5 text-pretty">
                 Heterogeneous worker cluster with live latency trend sparklines and autonomous 15s health probes.
               </p>
             </div>
-            <div className="flex items-center gap-3 font-mono text-xs text-slate-400">
+            <div className="flex items-center gap-3 font-mono text-xs text-content-secondary">
               <span className="text-content-secondary flex items-center gap-1.5 font-medium"><span className="w-1.5 h-1.5 rounded-full bg-secondary inline-block" />3 registered nodes</span>
-              <span className="text-slate-600">|</span>
+              <span className="text-content-muted">|</span>
               <span>Health TTL: 120s</span>
             </div>
           </div>
@@ -1721,9 +1685,9 @@ function App() {
               return (
                 <div
                   key={b.id}
-                  className={`bg-surface border rounded-xl p-4 flex flex-col justify-between transition-all ${
+                  className={`bg-surface border rounded-xl p-4 flex flex-col justify-between transition-colors duration-150 ${
                     !b.enabled
-                      ? "border-slate-800 opacity-60"
+                      ? "border-border-subtle opacity-60"
                       : isEjected
                       ? "border-error/40 bg-error-container/10"
                       : isStale
@@ -1750,9 +1714,9 @@ function App() {
                               : "bg-error"
                           }`}
                         />
-                        <span className="font-mono font-bold text-sm text-slate-100">{b.name}</span>
+                        <span className="font-mono font-bold text-sm text-content-primary">{b.name}</span>
                         <span
-                          className={`text-[10px] font-mono px-2 py-0.5 rounded uppercase font-semibold ${
+                          className={`text-xs font-mono px-2 py-0.5 rounded uppercase font-semibold ${
                             isFast
                               ? "bg-secondary/10 border border-secondary/30 text-secondary"
                               : isSlow
@@ -1769,7 +1733,7 @@ function App() {
                         onClick={() => toggleBackend(b)}
                         className={`text-xs font-mono px-2.5 py-1 rounded border transition-colors ${
                           b.enabled
-                            ? "bg-surface-high hover:bg-error/20 text-slate-300 hover:text-error border-border hover:border-error/50"
+                            ? "bg-surface-high hover:bg-error/20 text-content-secondary hover:text-error border-border hover:border-error/50"
                             : "bg-secondary/20 text-secondary hover:bg-secondary/30 border-secondary/50 font-bold"
                         }`}
                         title={b.enabled ? "Disable node from receiving traffic" : "Enable node"}
@@ -1781,7 +1745,7 @@ function App() {
                     {/* Circuit Breaker Status Banner */}
                     <div className="mt-2 flex items-center justify-between">
                       <span
-                        className={`text-[10px] font-mono px-2 py-0.5 rounded font-medium flex items-center gap-1 ${
+                        className={`text-xs font-mono px-2 py-0.5 rounded font-medium flex items-center gap-1 ${
                           isEjected
                             ? "bg-error/15 text-error border border-error/30"
                             : isHalfOpen
@@ -1796,20 +1760,20 @@ function App() {
                           ? "Canary Probe"
                           : "Circuit Closed"}
                       </span>
-                      <span className="text-[10px] font-mono text-slate-500">
-                        Ejections: <strong className="text-slate-300">{cb?.total_ejections || 0}</strong>
+                      <span className="text-xs font-mono text-content-muted">
+                        Ejections: <strong className="text-content-secondary">{cb?.total_ejections || 0}</strong>
                       </span>
                     </div>
 
-                    <div className="text-[11px] font-mono text-slate-500 mt-2">
-                      Endpoint: <span className="text-slate-400">{b.base_url}</span>
+                    <div className="text-xs font-mono text-content-muted mt-2">
+                      Endpoint: <span className="text-content-secondary">{b.base_url}</span>
                     </div>
 
                     {/* Live Sparkline */}
                     <div className="mt-3 pt-2.5 border-t border-border-subtle">
-                      <div className="flex items-center justify-between text-[11px] font-mono text-slate-400 mb-1">
+                      <div className="flex items-center justify-between text-xs font-mono text-content-secondary mb-1">
                         <span>Latency Trend (Last 12)</span>
-                        <span className="text-slate-500 text-[10px]">Real-Time</span>
+                        <span className="text-content-muted text-xs">Real-Time</span>
                       </div>
                       <Sparkline values={history} color={sparklineColor} />
                     </div>
@@ -1817,16 +1781,16 @@ function App() {
                     {/* Gauges & Telemetry */}
                     <div className="mt-3 space-y-1.5 font-mono text-xs">
                       <div className="flex items-center justify-between">
-                        <span className="text-slate-400">Capacity Weight:</span>
-                        <span className="text-slate-200 font-bold">{b.capacity_weight}x</span>
+                        <span className="text-content-secondary">Capacity Weight:</span>
+                        <span className="text-content-primary font-bold">{b.capacity_weight}x</span>
                       </div>
 
                       <div className="flex items-center justify-between">
-                        <span className="text-slate-400">Health State:</span>
+                        <span className="text-content-secondary">Health State:</span>
                         <span
                           className={`uppercase font-bold ${
                             !b.enabled
-                              ? "text-slate-500"
+                              ? "text-content-muted"
                               : isStale
                               ? "text-amber"
                               : isHealthy
@@ -1839,15 +1803,15 @@ function App() {
                       </div>
 
                       <div className="flex items-center justify-between">
-                        <span className="text-slate-400">EWMA Latency:</span>
+                        <span className="text-content-secondary">EWMA Latency:</span>
                         <span className="text-primary font-bold">
                           {cb && cb.latency_ewma_ms > 0 ? `${cb.latency_ewma_ms.toFixed(1)} ms` : "—"}
                         </span>
                       </div>
 
                       <div className="flex items-center justify-between">
-                        <span className="text-slate-400">Last Observation:</span>
-                        <span className={isStale ? "text-amber font-semibold" : "text-slate-400"}>
+                        <span className="text-content-secondary">Last Observation:</span>
+                        <span className={isStale ? "text-amber font-semibold" : "text-content-secondary"}>
                           {diffSeconds !== null ? `${diffSeconds}s ago` : "—"}
                         </span>
                       </div>
@@ -1871,10 +1835,10 @@ function App() {
                     {/* Chaos Fault Injection Button */}
                     <button
                       onClick={() => injectChaos(b.id, isEjected ? "reset" : "trip")}
-                      className={`text-[11px] font-mono px-2 py-0.5 rounded border transition-colors flex items-center gap-1 ${
+                      className={`text-xs font-mono px-2 py-0.5 rounded border transition-colors flex items-center gap-1 ${
                         isEjected
                           ? "bg-secondary/20 hover:bg-secondary/30 text-secondary border-secondary/40 font-bold"
-                          : "bg-surface-high hover:bg-error/20 text-slate-400 hover:text-error border-border hover:border-error/40"
+                          : "bg-surface-high hover:bg-error/20 text-content-secondary hover:text-error border-border hover:border-error/40"
                       }`}
                       title={isEjected ? "Manually reset circuit breaker" : "Trip circuit breaker and eject node"}
                     >
@@ -1886,7 +1850,7 @@ function App() {
                       onClick={async () => {
                         await sendWorkloadRequest("normal");
                       }}
-                      className="text-xs font-mono text-slate-400 hover:text-slate-200 flex items-center gap-1"
+                      className="text-xs font-mono text-content-secondary hover:text-content-primary flex items-center gap-1"
                     >
                       <Send className="w-3 h-3" />
                       <span>Test Route</span>
@@ -1907,7 +1871,7 @@ function App() {
             <div className="flex flex-wrap items-center gap-1">
               <button
                 onClick={() => setActiveTab("diagram")}
-                className={`px-2.5 py-1.5 rounded-lg font-mono text-xs font-bold transition-all flex items-center gap-1.5 ${
+                className={`px-2.5 py-1.5 rounded-lg font-mono text-xs font-bold transition-colors duration-150 flex items-center gap-1.5 ${
                   activeTab === "diagram"
                     ? "bg-surface-raised text-content-primary border border-border surface-raised-highlight font-medium"
                     : "text-content-secondary hover:text-content-primary hover:bg-surface-raised/50 border border-transparent font-medium"
@@ -1919,7 +1883,7 @@ function App() {
 
               <button
                 onClick={() => setActiveTab("shootout")}
-                className={`px-2.5 py-1.5 rounded-lg font-mono text-xs font-bold transition-all flex items-center gap-1.5 ${
+                className={`px-2.5 py-1.5 rounded-lg font-mono text-xs font-bold transition-colors duration-150 flex items-center gap-1.5 ${
                   activeTab === "shootout"
                     ? "bg-surface-raised text-content-primary border border-border surface-raised-highlight font-medium"
                     : "text-content-secondary hover:text-content-primary hover:bg-surface-raised/50 border border-transparent font-medium"
@@ -1934,7 +1898,7 @@ function App() {
                   setActiveTab("tournament");
                   if (!tournamentData) fetchTournament();
                 }}
-                className={`px-2.5 py-1.5 rounded-lg font-mono text-xs font-bold transition-all flex items-center gap-1.5 ${
+                className={`px-2.5 py-1.5 rounded-lg font-mono text-xs font-bold transition-colors duration-150 flex items-center gap-1.5 ${
                   activeTab === "tournament"
                     ? "bg-surface-raised text-content-primary border border-border surface-raised-highlight font-medium"
                     : "text-content-secondary hover:text-content-primary hover:bg-surface-raised/50 border border-transparent font-medium"
@@ -1946,7 +1910,7 @@ function App() {
 
               <button
                 onClick={() => setActiveTab("resilience")}
-                className={`px-2.5 py-1.5 rounded-lg font-mono text-xs font-bold transition-all flex items-center gap-1.5 ${
+                className={`px-2.5 py-1.5 rounded-lg font-mono text-xs font-bold transition-colors duration-150 flex items-center gap-1.5 ${
                   activeTab === "resilience"
                     ? "bg-surface-raised text-content-primary border border-border surface-raised-highlight font-medium"
                     : "text-content-secondary hover:text-content-primary hover:bg-surface-raised/50 border border-transparent font-medium"
@@ -1958,7 +1922,7 @@ function App() {
 
               <button
                 onClick={() => setActiveTab("live")}
-                className={`px-2.5 py-1.5 rounded-lg font-mono text-xs font-bold transition-all flex items-center gap-1.5 ${
+                className={`px-2.5 py-1.5 rounded-lg font-mono text-xs font-bold transition-colors duration-150 flex items-center gap-1.5 ${
                   activeTab === "live"
                     ? "bg-surface-raised text-content-primary border border-border surface-raised-highlight font-medium"
                     : "text-content-secondary hover:text-content-primary hover:bg-surface-raised/50 border border-transparent font-medium"
@@ -1967,8 +1931,8 @@ function App() {
                 <Zap className="w-3.5 h-3.5" />
                 <span>Decisions Stream</span>
                 <span
-                  className={`px-1.5 py-0.2 text-[9px] rounded font-mono ${
-                    activeTab === "live" ? "bg-slate-900 text-primary" : "bg-surface-highest text-slate-400"
+                  className={`px-1.5 py-0.2 text-xs rounded font-mono ${
+                    activeTab === "live" ? "bg-surface-card text-primary" : "bg-surface-highest text-content-secondary"
                   }`}
                 >
                   {decisions.length}
@@ -1977,7 +1941,7 @@ function App() {
 
               <button
                 onClick={() => setActiveTab("matrix")}
-                className={`px-2.5 py-1.5 rounded-lg font-mono text-xs font-bold transition-all flex items-center gap-1.5 ${
+                className={`px-2.5 py-1.5 rounded-lg font-mono text-xs font-bold transition-colors duration-150 flex items-center gap-1.5 ${
                   activeTab === "matrix"
                     ? "bg-surface-raised text-content-primary border border-border surface-raised-highlight font-medium"
                     : "text-content-secondary hover:text-content-primary hover:bg-surface-raised/50 border border-transparent font-medium"
@@ -1989,7 +1953,7 @@ function App() {
 
               <button
                 onClick={() => setActiveTab("viva")}
-                className={`px-2.5 py-1.5 rounded-lg font-mono text-xs font-bold transition-all flex items-center gap-1.5 ${
+                className={`px-2.5 py-1.5 rounded-lg font-mono text-xs font-bold transition-colors duration-150 flex items-center gap-1.5 ${
                   activeTab === "viva"
                     ? "bg-surface-raised text-content-primary border border-border surface-raised-highlight font-medium"
                     : "text-content-secondary hover:text-content-primary hover:bg-surface-raised/50 border border-transparent font-medium"
@@ -2001,7 +1965,7 @@ function App() {
 
               <button
                 onClick={() => setActiveTab("guide")}
-                className={`px-2.5 py-1.5 rounded-lg font-mono text-xs font-bold transition-all flex items-center gap-1.5 ${
+                className={`px-2.5 py-1.5 rounded-lg font-mono text-xs font-bold transition-colors duration-150 flex items-center gap-1.5 ${
                   activeTab === "guide"
                     ? "bg-surface-raised text-content-primary border border-border surface-raised-highlight font-medium"
                     : "text-content-secondary hover:text-content-primary hover:bg-surface-raised/50 border border-transparent font-medium"
@@ -2013,7 +1977,7 @@ function App() {
 
               <button
                 onClick={() => setActiveTab("dossier")}
-                className={`px-2.5 py-1.5 rounded-lg font-mono text-xs font-bold transition-all flex items-center gap-1.5 ${
+                className={`px-2.5 py-1.5 rounded-lg font-mono text-xs font-bold transition-colors duration-150 flex items-center gap-1.5 ${
                   activeTab === "dossier"
                     ? "bg-surface-raised text-content-primary border border-secondary/40 surface-raised-highlight font-medium"
                     : "text-content-secondary hover:text-content-primary hover:bg-surface-raised/50 border border-border-subtle font-medium"
@@ -2028,14 +1992,14 @@ function App() {
             {activeTab === "live" && (
               <div className="flex items-center gap-2 w-full sm:w-auto">
                 <div className="relative flex items-center flex-1 sm:w-56">
-                  <Search className="w-3.5 h-3.5 absolute left-2.5 text-slate-500" />
+                  <Search className="w-3.5 h-3.5 absolute left-2.5 text-content-muted" />
                   <input
                     type="text"
                     value={searchFilter}
                     onChange={(e) => setSearchFilter(e.target.value)}
                     placeholder="Search worker, policy..."
                     aria-label="Filter routing stream by worker or policy"
-                    className="w-full bg-surface-high border border-border rounded pl-8 pr-3 py-1 font-mono text-xs text-slate-200 placeholder-slate-600 focus:outline-none focus:border-primary"
+                    className="w-full bg-surface-high border border-border rounded pl-8 pr-3 py-1 font-mono text-xs text-content-primary placeholder-slate-600 focus:outline-none focus:border-primary"
                   />
                   {searchFilter && (
                     <button
@@ -2050,7 +2014,7 @@ function App() {
 
                 <button
                   onClick={exportDecisionsCSV}
-                  className="px-2.5 py-1 bg-surface-high hover:bg-surface-bright border border-border text-slate-300 font-mono text-xs rounded flex items-center gap-1"
+                  className="px-2.5 py-1 bg-surface-high hover:bg-surface-bright border border-border text-content-secondary font-mono text-xs rounded flex items-center gap-1"
                   title="Export raw decisions log as CSV"
                 >
                   <Download className="w-3 h-3" />
@@ -2059,7 +2023,7 @@ function App() {
 
                 <button
                   onClick={exportDecisionsJSON}
-                  className="px-2.5 py-1 bg-surface-high hover:bg-surface-bright border border-border text-slate-300 font-mono text-xs rounded flex items-center gap-1"
+                  className="px-2.5 py-1 bg-surface-high hover:bg-surface-bright border border-border text-content-secondary font-mono text-xs rounded flex items-center gap-1"
                   title="Export raw decisions log as JSON"
                 >
                   <FileSpreadsheet className="w-3 h-3" />
@@ -2073,10 +2037,10 @@ function App() {
           {activeTab === "diagram" && (
             <div className="p-6 flex flex-col gap-6">
               <div className="bg-surface rounded-xl p-5 border border-border-subtle">
-                <h3 className="font-mono text-sm font-bold text-slate-100 uppercase mb-1">
+                <h3 className="font-mono text-sm font-bold text-content-primary uppercase mb-1">
                   Optimal path evaluation
                 </h3>
-                <p className="text-xs text-slate-400 mb-4 font-sans">
+                <p className="text-xs text-content-secondary mb-4 font-sans">
                   Whenever an HTTP request arrives, the router checks the selected policy to decide which backend will process it:
                 </p>
 
@@ -2085,7 +2049,7 @@ function App() {
                     <div className="font-bold text-secondary flex items-center gap-1.5 mb-1">
                       <span>Worker A · Fast tier (15ms)</span>
                     </div>
-                    <p className="text-[11px] text-slate-400 font-sans">
+                    <p className="text-xs text-content-secondary font-sans">
                       Base delay: 15ms. Chosen preferentially by the AI for heavy and standard workloads due to low execution latency.
                     </p>
                   </div>
@@ -2094,7 +2058,7 @@ function App() {
                     <div className="font-bold text-amber flex items-center gap-1.5 mb-1">
                       <span>Worker B · Straggler tier (60ms)</span>
                     </div>
-                    <p className="text-[11px] text-slate-400 font-sans">
+                    <p className="text-xs text-content-secondary font-sans">
                       Base delay: 60ms. AI algorithms actively detect this node's elevated EWMA latency and bypass it to avoid tail spikes.
                     </p>
                   </div>
@@ -2103,7 +2067,7 @@ function App() {
                     <div className="font-bold text-tertiary flex items-center gap-1.5 mb-1">
                       <span>Worker C · Balanced tier (30ms)</span>
                     </div>
-                    <p className="text-[11px] text-slate-400 font-sans">
+                    <p className="text-xs text-content-secondary font-sans">
                       Base delay: 30ms. Absorbs overflow traffic cleanly when Worker A experiences high concurrency or queue depth.
                     </p>
                   </div>
@@ -2115,15 +2079,15 @@ function App() {
                 <div className="w-full flex items-center justify-between mb-4 border-b border-border-subtle pb-3">
                   <div className="flex items-center gap-2">
                     <Radio className="w-4 h-4 text-content-muted" />
-                    <span className="font-mono text-xs font-bold uppercase text-slate-200">
+                    <span className="font-mono text-xs font-bold uppercase text-content-primary">
                       Live network packet visualizer (Layer 7 ingress)
                     </span>
                   </div>
                   <div className="flex items-center gap-3 text-xs font-mono">
-                    <span className="text-slate-400">
+                    <span className="text-content-secondary">
                       Active Strategy: <strong className="text-primary uppercase">{status.policy.replace(/_/g, " ")}</strong>
                     </span>
-                    <span className="text-slate-600">|</span>
+                    <span className="text-content-muted">|</span>
                     <span className="text-secondary font-bold">
                       Optimal Target: {activeWorkerName.toUpperCase()}
                     </span>
@@ -2151,7 +2115,7 @@ function App() {
                     <Trophy className="w-5 h-5 text-secondary" />
                     <span>Head-to-head algorithm benchmark</span>
                   </div>
-                  <p className="text-xs text-slate-400 font-sans mt-1">
+                  <p className="text-xs text-content-secondary font-sans mt-1">
                     Dispatches an identical synthetic workload across all 5 policies simultaneously to empirically measure P50, P95 tail latency, and straggler avoidance.
                   </p>
                 </div>
@@ -2159,11 +2123,11 @@ function App() {
                 {/* Shootout Controls */}
                 <div className="flex flex-wrap items-center gap-3">
                   <div className="flex items-center gap-1.5 bg-surface-high border border-border rounded px-2.5 py-1">
-                    <span className="text-[11px] font-mono text-slate-400">Class:</span>
+                    <span className="text-xs font-mono text-content-secondary">Class:</span>
                     <select
                       value={shootoutClass}
                       onChange={(e) => setShootoutClass(e.target.value as any)}
-                      className="bg-transparent text-xs font-mono text-slate-200 focus:outline-none"
+                      className="bg-transparent text-xs font-mono text-content-primary focus:outline-none"
                     >
                       <option value="light">Light (5ms)</option>
                       <option value="normal">Normal (15ms)</option>
@@ -2172,11 +2136,11 @@ function App() {
                   </div>
 
                   <div className="flex items-center gap-1.5 bg-surface-high border border-border rounded px-2.5 py-1">
-                    <span className="text-[11px] font-mono text-slate-400">Rounds:</span>
+                    <span className="text-xs font-mono text-content-secondary">Rounds:</span>
                     <select
                       value={shootoutRounds}
                       onChange={(e) => setShootoutRounds(Number(e.target.value))}
-                      className="bg-transparent text-xs font-mono text-slate-200 focus:outline-none"
+                      className="bg-transparent text-xs font-mono text-content-primary focus:outline-none"
                     >
                       <option value={4}>4 Reqs / Policy</option>
                       <option value={6}>6 Reqs / Policy</option>
@@ -2188,7 +2152,7 @@ function App() {
                   <button
                     onClick={runShootout}
                     disabled={isRunningShootout}
-                    className="px-4 py-2 bg-secondary hover:bg-secondary-light text-slate-950 font-mono text-xs font-bold rounded-lg transition-all flex items-center gap-2 disabled:opacity-50"
+                    className="px-4 py-2 bg-secondary hover:bg-secondary-light text-surface-deep font-mono text-xs font-bold rounded-lg transition-colors duration-150 flex items-center gap-2 disabled:opacity-50"
                   >
                     {isRunningShootout ? (
                       <RefreshCw className="w-3.5 h-3.5 animate-spin" />
@@ -2217,7 +2181,7 @@ function App() {
                     </div>
                   </div>
                   <div className="text-right">
-                    <span className="text-xs text-slate-400 block">AI Tail Latency Improvement</span>
+                    <span className="text-xs text-content-secondary block">AI Tail Latency Improvement</span>
                     <span className="text-lg font-bold text-secondary">
                       +{shootoutData.ai_p95_speedup_percent}% Faster P95
                     </span>
@@ -2237,7 +2201,7 @@ function App() {
                     return (
                       <div
                         key={polName}
-                        className={`bg-surface border rounded-xl p-4 flex flex-col justify-between transition-all ${
+                        className={`bg-surface border rounded-xl p-4 flex flex-col justify-between transition-colors duration-150 ${
                           isWinner
                             ? "border-secondary/40 bg-surface-raised surface-raised-highlight"
                             : "border-border-subtle bg-surface-card"
@@ -2249,7 +2213,7 @@ function App() {
                               {polName.replace(/_/g, " ")}
                             </span>
                             {isWinner && (
-                              <span className="px-2 py-0.5 bg-secondary text-slate-950 font-bold text-[10px] rounded">
+                              <span className="px-2 py-0.5 bg-secondary text-surface-deep font-bold text-xs rounded">
                                 WINNER
                               </span>
                             )}
@@ -2257,24 +2221,24 @@ function App() {
 
                           <div className="space-y-3 mt-3">
                             <div className="flex items-center justify-between pb-1.5 border-b border-border-subtle">
-                              <span className="text-slate-400">P95 Tail Latency:</span>
-                              <span className={`font-bold text-sm ${isWinner ? "text-secondary" : "text-slate-200"}`}>
+                              <span className="text-content-secondary">P95 Tail Latency:</span>
+                              <span className={`font-bold text-sm ${isWinner ? "text-secondary" : "text-content-primary"}`}>
                                 {polData.p95_latency_ms.toFixed(1)} ms
                               </span>
                             </div>
 
                             <div className="flex items-center justify-between pb-1.5 border-b border-border-subtle">
-                              <span className="text-slate-400">Median (P50):</span>
-                              <span className="text-slate-300 font-bold">{polData.p50_latency_ms.toFixed(1)} ms</span>
+                              <span className="text-content-secondary">Median (P50):</span>
+                              <span className="text-content-secondary font-bold">{polData.p50_latency_ms.toFixed(1)} ms</span>
                             </div>
 
                             <div className="flex items-center justify-between pb-1.5 border-b border-border-subtle">
-                              <span className="text-slate-400">Mean Latency:</span>
-                              <span className="text-slate-300">{polData.mean_latency_ms.toFixed(1)} ms</span>
+                              <span className="text-content-secondary">Mean Latency:</span>
+                              <span className="text-content-secondary">{polData.mean_latency_ms.toFixed(1)} ms</span>
                             </div>
 
                             <div className="flex items-center justify-between pb-1.5 border-b border-border-subtle">
-                              <span className="text-slate-400">Straggler Avoidance:</span>
+                              <span className="text-content-secondary">Straggler Avoidance:</span>
                               <span className={polData.slow_worker_hits === 0 ? "text-secondary font-bold" : "text-amber font-bold"}>
                                 {polData.slow_worker_avoidance_rate.toFixed(0)}%
                               </span>
@@ -2283,12 +2247,12 @@ function App() {
 
                           {/* Worker allocation breakdown */}
                           <div className="mt-4 pt-2">
-                            <span className="text-[10px] text-slate-400 block mb-1">Traffic Distribution:</span>
-                            <div className="space-y-1 text-[11px]">
+                            <span className="text-xs text-content-secondary block mb-1">Traffic Distribution:</span>
+                            <div className="space-y-1 text-xs">
                               {Object.entries(polData.worker_distribution).map(([wName, wCount]) => (
-                                <div key={wName} className="flex justify-between items-center text-slate-400">
+                                <div key={wName} className="flex justify-between items-center text-content-secondary">
                                   <span>{wName}:</span>
-                                  <span className="font-bold text-slate-200">
+                                  <span className="font-bold text-content-primary">
                                     {wCount} reqs ({Math.round((wCount / polData.rounds) * 100)}%)
                                   </span>
                                 </div>
@@ -2297,7 +2261,7 @@ function App() {
                           </div>
                         </div>
 
-                        <div className="mt-4 pt-3 border-t border-border-subtle text-[11px] text-slate-500 font-sans">
+                        <div className="mt-4 pt-3 border-t border-border-subtle text-xs text-content-muted font-sans">
                           {isAI
                             ? "AI dynamically predicted Worker B's penalty and routed over 90% of requests to Worker A & C."
                             : isWRR
@@ -2311,10 +2275,10 @@ function App() {
                   })}
                 </div>
               ) : (
-                <div className="bg-surface border border-border-subtle rounded-xl p-12 text-center text-slate-500 font-mono">
-                  <Trophy className="w-10 h-10 text-slate-600 mx-auto mb-2" />
-                  <p className="text-slate-300 font-bold">No Benchmark Shootout Data Yet</p>
-                  <p className="text-xs text-slate-500 mt-1 max-w-md mx-auto font-sans">
+                <div className="bg-surface border border-border-subtle rounded-xl p-12 text-center text-content-muted font-mono">
+                  <Trophy className="w-10 h-10 text-content-muted mx-auto mb-2" />
+                  <p className="text-content-secondary font-bold">No Benchmark Shootout Data Yet</p>
+                  <p className="text-xs text-content-muted mt-1 max-w-md mx-auto font-sans">
                     Click the "Run 5-Way Shootout" button above to execute an automated comparative test across Round Robin, Weighted Round Robin, Least Connections, Consistent Hashing, and AI Latency.
                   </p>
                 </div>
@@ -2332,7 +2296,7 @@ function App() {
                     <Award className="w-5 h-5 text-secondary" />
                     <span>Model tournament arena</span>
                   </div>
-                  <p className="text-xs text-slate-400 font-sans mt-1">
+                  <p className="text-xs text-content-secondary font-sans mt-1">
                     Direct benchmark comparison answering the pivotal viva question: <em>"Why Random Forest over Gradient Boosting or Linear Regression?"</em>
                   </p>
                 </div>
@@ -2340,7 +2304,7 @@ function App() {
                 <button
                   onClick={fetchTournament}
                   disabled={isLoadingTournament}
-                  className="px-4 py-2 bg-primary hover:bg-primary-light text-slate-950 font-mono text-xs font-bold rounded-lg transition-all flex items-center gap-2 disabled:opacity-50"
+                  className="px-4 py-2 bg-primary hover:bg-primary-light text-surface-deep font-mono text-xs font-bold rounded-lg transition-colors duration-150 flex items-center gap-2 disabled:opacity-50"
                 >
                   <RefreshCw className={`w-3.5 h-3.5 ${isLoadingTournament ? "animate-spin" : ""}`} />
                   <span>{isLoadingTournament ? "Evaluating Models..." : "Run Tournament Benchmark"}</span>
@@ -2359,7 +2323,7 @@ function App() {
                       return (
                         <div
                           key={cand.algorithm_name}
-                          className={`bg-surface border rounded-xl p-5 flex flex-col justify-between transition-all ${
+                          className={`bg-surface border rounded-xl p-5 flex flex-col justify-between transition-colors duration-150 ${
                             cand.is_active
                               ? "border-secondary/40 bg-surface-raised surface-raised-highlight"
                               : "border-border-subtle bg-surface-card hover:bg-surface-raised/40"
@@ -2369,7 +2333,7 @@ function App() {
                             {/* Card Header & Medals */}
                             <div className="flex items-center justify-between mb-2">
                               <span
-                                className={`px-2 py-0.5 rounded font-mono text-[10px] font-medium ${
+                                className={`px-2 py-0.5 rounded font-mono text-xs font-medium ${
                                   isGold
                                     ? "bg-secondary/15 text-secondary border border-secondary/30"
                                     : isSilver
@@ -2381,57 +2345,57 @@ function App() {
                               </span>
 
                               {cand.is_active ? (
-                                <span className="px-2 py-0.5 bg-secondary text-slate-950 font-bold text-[10px] rounded">
+                                <span className="px-2 py-0.5 bg-secondary text-surface-deep font-bold text-xs rounded">
                                   ACTIVE IN PROXY
                                 </span>
                               ) : (
-                                <span className="text-slate-500 text-[10px]">STANDBY</span>
+                                <span className="text-content-muted text-xs">STANDBY</span>
                               )}
                             </div>
 
-                            <h4 className="font-mono text-base font-bold text-slate-100 mt-2">
+                            <h4 className="font-mono text-base font-bold text-content-primary mt-2">
                               {cand.model_type}
                             </h4>
-                            <p className="text-[11px] font-mono text-slate-500">
+                            <p className="text-xs font-mono text-content-muted">
                               Class: {cand.algorithm_name}
                             </p>
 
-                            <p className="text-xs text-slate-400 font-sans mt-3 leading-relaxed">
+                            <p className="text-xs text-content-secondary font-sans mt-3 leading-relaxed">
                               {cand.description}
                             </p>
 
                             {/* Performance Metrics Scorecard */}
                             <div className="mt-4 space-y-2 border-t border-border-subtle pt-3">
                               <div className="flex items-center justify-between pb-1 border-b border-border-subtle/50">
-                                <span className="text-slate-400">Validation MAE:</span>
-                                <span className={`font-bold ${isChampion ? "text-secondary text-sm" : "text-slate-200"}`}>
+                                <span className="text-content-secondary">Validation MAE:</span>
+                                <span className={`font-bold ${isChampion ? "text-secondary text-sm" : "text-content-primary"}`}>
                                   {cand.validation_mae_ms.toFixed(2)} ms
                                 </span>
                               </div>
 
                               <div className="flex items-center justify-between pb-1 border-b border-border-subtle/50">
-                                <span className="text-slate-400">Validation RMSE:</span>
-                                <span className="text-slate-300 font-medium">
+                                <span className="text-content-secondary">Validation RMSE:</span>
+                                <span className="text-content-secondary font-medium">
                                   {cand.validation_rmse_ms.toFixed(2)} ms
                                 </span>
                               </div>
 
                               <div className="flex items-center justify-between pb-1 border-b border-border-subtle/50">
-                                <span className="text-slate-400">R² Variance Explained:</span>
-                                <span className="text-slate-300 font-bold">
+                                <span className="text-content-secondary">R² Variance Explained:</span>
+                                <span className="text-content-secondary font-bold">
                                   {(cand.r2_score * 100).toFixed(1)}%
                                 </span>
                               </div>
 
                               <div className="flex items-center justify-between pb-1 border-b border-border-subtle/50">
-                                <span className="text-slate-400">Train Time:</span>
-                                <span className="text-slate-400">
+                                <span className="text-content-secondary">Train Time:</span>
+                                <span className="text-content-secondary">
                                   {cand.train_time_ms.toFixed(1)} ms
                                 </span>
                               </div>
 
                               <div className="flex items-center justify-between">
-                                <span className="text-slate-400">P95 Inference Latency:</span>
+                                <span className="text-content-secondary">P95 Inference Latency:</span>
                                 <span className="text-primary font-bold">
                                   {cand.inference_p95_ms.toFixed(3)} ms
                                 </span>
@@ -2452,7 +2416,7 @@ function App() {
                             ) : (
                               <button
                                 onClick={() => activateTournamentModel(cand.algorithm_name)}
-                                className="w-full py-2 bg-surface-high hover:bg-primary hover:text-slate-950 border border-border hover:border-primary text-slate-200 rounded-lg font-bold text-xs transition-colors flex items-center justify-center gap-1.5"
+                                className="w-full py-2 bg-surface-high hover:bg-primary hover:text-surface-deep border border-border hover:border-primary text-content-primary rounded-lg font-bold text-xs transition-colors flex items-center justify-center gap-1.5"
                               >
                                 <Zap className="w-3.5 h-3.5" />
                                 <span>Activate As Active Model</span>
@@ -2465,7 +2429,7 @@ function App() {
                   </div>
 
                   {/* Academic Architectural Defense Callout */}
-                  <div className="p-4 bg-surface rounded-xl border border-border-subtle font-sans text-xs text-slate-300 leading-relaxed">
+                  <div className="p-4 bg-surface rounded-xl border border-border-subtle font-sans text-xs text-content-secondary leading-relaxed">
                     <div className="flex items-center gap-2 font-mono font-bold text-primary mb-1">
                       <BookOpen className="w-4 h-4 text-primary" />
                       <span>Viva Defense Analysis: Algorithmic Selection Criteria</span>
@@ -2476,10 +2440,10 @@ function App() {
                   </div>
                 </div>
               ) : (
-                <div className="bg-surface border border-border-subtle rounded-xl p-12 text-center text-slate-500 font-mono">
-                  <Award className="w-10 h-10 text-slate-600 mx-auto mb-2" />
-                  <p className="text-slate-300 font-bold">No Tournament Data Loaded</p>
-                  <p className="text-xs text-slate-500 mt-1 max-w-md mx-auto font-sans">
+                <div className="bg-surface border border-border-subtle rounded-xl p-12 text-center text-content-muted font-mono">
+                  <Award className="w-10 h-10 text-content-muted mx-auto mb-2" />
+                  <p className="text-content-secondary font-bold">No Tournament Data Loaded</p>
+                  <p className="text-xs text-content-muted mt-1 max-w-md mx-auto font-sans">
                     Click "Run Tournament Benchmark" to evaluate Random Forest vs HistGradientBoosting vs Ridge Regression across validation MAE, RMSE, train speed, and inference latency.
                   </p>
                 </div>
@@ -2496,7 +2460,7 @@ function App() {
                   <ShieldCheck className="w-5 h-5 text-secondary" />
                   <span>Circuit breaker & outlier ejection telemetry</span>
                 </div>
-                <p className="text-xs text-slate-400 font-sans mb-4">
+                <p className="text-xs text-content-secondary font-sans mb-4">
                   Implements Envoy / Istio enterprise resilience patterns. If a node suffers 3 consecutive timeouts or its EWMA latency crosses 85ms, the circuit trips to <code>OPEN</code>, ejecting the node for 15s cooldown before probing with canary traffic (<code>HALF_OPEN</code>).
                 </p>
 
@@ -2504,7 +2468,7 @@ function App() {
                 <div className="overflow-x-auto">
                   <table className="w-full text-left font-mono text-xs border-collapse">
                     <thead>
-                      <tr className="border-b border-border-subtle text-slate-400 text-[11px] uppercase">
+                      <tr className="border-b border-border-subtle text-content-secondary text-xs uppercase">
                         <th className="py-2.5 px-3">Backend Worker</th>
                         <th className="py-2.5 px-3">Circuit State</th>
                         <th className="py-2.5 px-3">Consecutive Fails</th>
@@ -2514,23 +2478,23 @@ function App() {
                         <th className="py-2.5 px-3 text-right">Chaos Action</th>
                       </tr>
                     </thead>
-                    <tbody className="divide-y divide-border-subtle/50 text-slate-200">
+                    <tbody className="divide-y divide-border-subtle/50 text-content-primary">
                       {circuitBreakers.map((cb) => {
                         const isOpen = cb.state === "OPEN";
                         const isHalfOpen = cb.state === "HALF_OPEN";
 
                         return (
                           <tr key={cb.backend_id} className="hover:bg-surface-high/30">
-                            <td className="py-2.5 px-3 font-bold text-slate-100">
+                            <td className="py-2.5 px-3 font-bold text-content-primary">
                               {cb.name || cb.backend_id}
                             </td>
                             <td className="py-2.5 px-3">
                               <span
-                                className={`px-2 py-0.5 rounded text-[10px] font-bold uppercase ${
+                                className={`px-2 py-0.5 rounded text-xs font-bold uppercase ${
                                   isOpen
                                     ? "bg-error/15 text-error border border-error/30"
                                     : isHalfOpen
-                                    ? "bg-amber text-slate-950"
+                                    ? "bg-amber text-surface-deep"
                                     : "bg-secondary/15 text-secondary border border-secondary/30"
                                 }`}
                               >
@@ -2538,7 +2502,7 @@ function App() {
                               </span>
                             </td>
                             <td className="py-2.5 px-3">{cb.consecutive_failures} / 3</td>
-                            <td className="py-2.5 px-3 text-slate-300 font-bold">{cb.total_ejections}</td>
+                            <td className="py-2.5 px-3 text-content-secondary font-bold">{cb.total_ejections}</td>
                             <td className="py-2.5 px-3 text-primary font-bold">
                               {cb.latency_ewma_ms > 0 ? `${cb.latency_ewma_ms.toFixed(1)} ms` : "—"}
                             </td>
@@ -2546,16 +2510,16 @@ function App() {
                               {isOpen ? (
                                 <span className="text-error font-bold">{cb.remaining_cooldown_seconds}s</span>
                               ) : (
-                                <span className="text-slate-500">None</span>
+                                <span className="text-content-muted">None</span>
                               )}
                             </td>
                             <td className="py-2.5 px-3 text-right">
                               <button
                                 onClick={() => injectChaos(cb.backend_id, isOpen ? "reset" : "trip")}
-                                className={`px-2.5 py-1 rounded text-[11px] font-bold border transition-colors ${
+                                className={`px-2.5 py-1 rounded text-xs font-bold border transition-colors ${
                                   isOpen
                                     ? "bg-secondary/20 hover:bg-secondary/30 text-secondary border-secondary/40"
-                                    : "bg-surface-high hover:bg-error/20 text-slate-400 hover:text-error border-border hover:border-error/40"
+                                    : "bg-surface-high hover:bg-error/20 text-content-secondary hover:text-error border-border hover:border-error/40"
                                 }`}
                               >
                                 {isOpen ? "Reset Breaker" : "Inject Outlier (Trip)"}
@@ -2577,7 +2541,7 @@ function App() {
                       <TrendingUp className="w-5 h-5 text-tertiary" />
                       <span>Empirical tail latency cumulative distribution (CDF)</span>
                     </div>
-                    <p className="text-xs text-slate-400 font-sans mt-0.5">
+                    <p className="text-xs text-content-secondary font-sans mt-0.5">
                       Visualizes Dean & Barroso (2013) <em>"The Tail at Scale"</em> principle. Plots the fraction of requests completing under each millisecond threshold.
                     </p>
                   </div>
@@ -2585,11 +2549,11 @@ function App() {
                   {/* CDF Test Controls */}
                   <div className="flex flex-wrap items-center gap-3">
                     <div className="flex items-center gap-1.5 bg-surface-high border border-border rounded px-2.5 py-1">
-                      <span className="text-[11px] font-mono text-slate-400">Policy:</span>
+                      <span className="text-xs font-mono text-content-secondary">Policy:</span>
                       <select
                         value={stressPolicy}
                         onChange={(e) => setStressPolicy(e.target.value)}
-                        className="bg-transparent text-xs font-mono text-slate-200 focus:outline-none"
+                        className="bg-transparent text-xs font-mono text-content-primary focus:outline-none"
                       >
                         <option value="round_robin">Round Robin</option>
                         <option value="weighted_round_robin">Weighted RR</option>
@@ -2600,11 +2564,11 @@ function App() {
                     </div>
 
                     <div className="flex items-center gap-1.5 bg-surface-high border border-border rounded px-2.5 py-1">
-                      <span className="text-[11px] font-mono text-slate-400">Rounds:</span>
+                      <span className="text-xs font-mono text-content-secondary">Rounds:</span>
                       <select
                         value={stressRounds}
                         onChange={(e) => setStressRounds(Number(e.target.value))}
-                        className="bg-transparent text-xs font-mono text-slate-200 focus:outline-none"
+                        className="bg-transparent text-xs font-mono text-content-primary focus:outline-none"
                       >
                         <option value={15}>15 Requests</option>
                         <option value={25}>25 Requests</option>
@@ -2615,7 +2579,7 @@ function App() {
                     <button
                       onClick={runStressTest}
                       disabled={isRunningStress}
-                      className="px-4 py-2 bg-tertiary hover:bg-tertiary-light text-slate-950 font-mono text-xs font-bold rounded-lg transition-all flex items-center gap-2 disabled:opacity-50"
+                      className="px-4 py-2 bg-tertiary hover:bg-tertiary-light text-surface-deep font-mono text-xs font-bold rounded-lg transition-colors duration-150 flex items-center gap-2 disabled:opacity-50"
                     >
                       <RefreshCw className={`w-3.5 h-3.5 ${isRunningStress ? "animate-spin" : ""}`} />
                       <span>{isRunningStress ? "Measuring Latencies..." : "Generate CDF Curve"}</span>
@@ -2628,7 +2592,7 @@ function App() {
                   <div className="grid grid-cols-1 lg:grid-cols-3 gap-6 font-mono text-xs">
                     {/* SVG Curve */}
                     <div className="lg:col-span-2 bg-surface-lowest p-4 rounded-xl border border-border-subtle flex flex-col items-center">
-                      <div className="w-full flex items-center justify-between text-slate-400 text-[11px] mb-2">
+                      <div className="w-full flex items-center justify-between text-content-secondary text-xs mb-2">
                         <span>P(Latency &le; x) vs Latency Threshold (ms)</span>
                         <span className="text-secondary font-bold">Policy: {stressResult.policy.toUpperCase()}</span>
                       </div>
@@ -2703,48 +2667,48 @@ function App() {
                     {/* CDF Statistics Card */}
                     <div className="bg-surface p-4 rounded-xl border border-border-subtle flex flex-col justify-between">
                       <div>
-                        <h4 className="font-bold text-slate-100 uppercase pb-2 border-b border-border-subtle mb-3">
+                        <h4 className="font-bold text-content-primary uppercase pb-2 border-b border-border-subtle mb-3">
                           Percentile Breakdown
                         </h4>
 
                         <div className="space-y-2">
                           <div className="flex justify-between items-center pb-1 border-b border-border-subtle/50">
-                            <span className="text-slate-400">P50 (Median):</span>
-                            <span className="text-slate-200 font-bold">{stressResult.p50_latency_ms} ms</span>
+                            <span className="text-content-secondary">P50 (Median):</span>
+                            <span className="text-content-primary font-bold">{stressResult.p50_latency_ms} ms</span>
                           </div>
 
                           <div className="flex justify-between items-center pb-1 border-b border-border-subtle/50">
-                            <span className="text-slate-400">P90 Percentile:</span>
-                            <span className="text-slate-200">{stressResult.p90_latency_ms} ms</span>
+                            <span className="text-content-secondary">P90 Percentile:</span>
+                            <span className="text-content-primary">{stressResult.p90_latency_ms} ms</span>
                           </div>
 
                           <div className="flex justify-between items-center pb-1 border-b border-border-subtle/50">
-                            <span className="text-slate-400">P95 Tail Latency:</span>
+                            <span className="text-content-secondary">P95 Tail Latency:</span>
                             <span className="text-secondary font-bold text-sm">{stressResult.p95_latency_ms} ms</span>
                           </div>
 
                           <div className="flex justify-between items-center pb-1 border-b border-border-subtle/50">
-                            <span className="text-slate-400">P99 Maximum Tail:</span>
+                            <span className="text-content-secondary">P99 Maximum Tail:</span>
                             <span className="text-error font-bold">{stressResult.p99_latency_ms} ms</span>
                           </div>
 
                           <div className="flex justify-between items-center">
-                            <span className="text-slate-400">Straggler Avoidance:</span>
+                            <span className="text-content-secondary">Straggler Avoidance:</span>
                             <span className="text-secondary font-bold">{stressResult.slow_worker_avoidance_rate}%</span>
                           </div>
                         </div>
                       </div>
 
-                      <div className="mt-4 pt-3 border-t border-border-subtle text-[11px] text-slate-400 font-sans leading-relaxed">
+                      <div className="mt-4 pt-3 border-t border-border-subtle text-xs text-content-secondary font-sans leading-relaxed">
                         A steep, left-shifted curve indicates that almost all requests finish with minimal latency. Tail suppression prevents the top 5% of slow responses from degrading overall user experience.
                       </div>
                     </div>
                   </div>
                 ) : (
-                  <div className="bg-surface-lowest border border-border-subtle rounded-xl p-8 text-center text-slate-500 font-mono">
-                    <TrendingUp className="w-8 h-8 text-slate-600 mx-auto mb-2" />
-                    <p className="text-slate-300 font-bold">No Empirical CDF Data Yet</p>
-                    <p className="text-xs text-slate-500 mt-1 max-w-sm mx-auto font-sans">
+                  <div className="bg-surface-lowest border border-border-subtle rounded-xl p-8 text-center text-content-muted font-mono">
+                    <TrendingUp className="w-8 h-8 text-content-muted mx-auto mb-2" />
+                    <p className="text-content-secondary font-bold">No Empirical CDF Data Yet</p>
+                    <p className="text-xs text-content-muted mt-1 max-w-sm mx-auto font-sans">
                       Select a policy and click "Generate CDF Curve" to dispatch concurrent requests and calculate the 20-point percentile distribution.
                     </p>
                   </div>
@@ -2757,7 +2721,7 @@ function App() {
           {activeTab === "live" && (
             <div className="overflow-x-auto">
               <table className="w-full text-left font-mono text-xs">
-                <thead className="bg-surface border-b border-border-subtle text-slate-400">
+                <thead className="bg-surface border-b border-border-subtle text-content-secondary">
                   <tr>
                     <th className="py-2.5 px-4 font-normal">Timestamp</th>
                     <th className="py-2.5 px-4 font-normal">Target Node</th>
@@ -2811,7 +2775,7 @@ function App() {
                           className="hover:bg-surface-high/30 transition-colors cursor-pointer"
                           onClick={() => setSelectedDecision(d)}
                         >
-                          <td className="py-2.5 px-4 text-slate-400">{formatTime(d.decided_at)}</td>
+                          <td className="py-2.5 px-4 text-content-secondary">{formatTime(d.decided_at)}</td>
                           <td className="py-2.5 px-4">
                             <div className="flex items-center gap-1.5 font-bold">
                               <span
@@ -2834,23 +2798,23 @@ function App() {
                           </td>
                           <td className="py-2.5 px-4">
                             <span
-                              className={`px-2 py-0.5 rounded text-[10px] font-bold uppercase ${
+                              className={`px-2 py-0.5 rounded text-xs font-bold uppercase ${
                                 d.policy === "ai_latency"
                                   ? "bg-secondary/15 text-secondary border border-secondary/30"
                                   : d.policy === "weighted_round_robin"
                                   ? "bg-amber/15 text-amber border border-amber/30"
                                   : d.policy === "least_connections"
                                   ? "bg-tertiary/15 text-tertiary border border-tertiary/30"
-                                  : "bg-surface-high text-slate-400"
+                                  : "bg-surface-high text-content-secondary"
                               }`}
                             >
                               {d.policy.replace(/_/g, " ")}
                             </span>
                           </td>
-                          <td className="py-2.5 px-4 text-slate-400 uppercase text-[10px]">
+                          <td className="py-2.5 px-4 text-content-secondary uppercase text-xs">
                             {d.request_class || "normal"}
                           </td>
-                          <td className="py-2.5 px-4 font-bold text-slate-200">
+                          <td className="py-2.5 px-4 font-bold text-content-primary">
                             {formatNumber(d.actual_latency_ms, 1, " ms")}
                           </td>
                           <td className="py-2.5 px-4 text-primary">
@@ -2858,7 +2822,7 @@ function App() {
                               ? `${d.predicted_latency_ms.toFixed(1)} ms`
                               : "—"}
                           </td>
-                          <td className="py-2.5 px-4 text-slate-300 font-sans text-xs">
+                          <td className="py-2.5 px-4 text-content-secondary font-sans text-xs">
                             {decisionReason}
                           </td>
                           <td className="py-2.5 px-4 text-right">
@@ -2867,7 +2831,7 @@ function App() {
                                 e.stopPropagation();
                                 setSelectedDecision(d);
                               }}
-                              className="text-primary hover:text-primary-light font-mono text-[11px] underline"
+                              className="text-primary hover:text-primary-light font-mono text-xs underline"
                             >
                               Inspect
                             </button>
@@ -2877,7 +2841,7 @@ function App() {
                     })}
                   {decisions.length === 0 && (
                     <tr>
-                      <td colSpan={8} className="py-8 text-center text-slate-500">
+                      <td colSpan={8} className="py-8 text-center text-content-muted">
                         No requests routed yet. Dispatch requests in the Playground above.
                       </td>
                     </tr>
@@ -2894,11 +2858,11 @@ function App() {
               <div className="bg-surface rounded-xl p-5 border border-border-subtle">
                 <div className="flex items-center justify-between pb-3 border-b border-border-subtle mb-4">
                   <div>
-                    <h3 className="font-mono text-sm font-bold text-slate-100 uppercase flex items-center gap-2">
+                    <h3 className="font-mono text-sm font-bold text-content-primary uppercase flex items-center gap-2">
                       <Cpu className="w-4 h-4 text-secondary" />
                       <span>Random Forest Feature Importance Weights</span>
                     </h3>
-                    <p className="text-xs text-slate-400 font-sans mt-0.5">
+                    <p className="text-xs text-content-secondary font-sans mt-0.5">
                       Relative feature importance (%) extracted from the active Scikit-Learn regressor. Demonstrates why AI prioritizes dynamic latency and CPU load over static properties.
                     </p>
                   </div>
@@ -2917,19 +2881,19 @@ function App() {
                       .map(([featName, featWeight]) => (
                         <div key={featName}>
                           <div className="flex justify-between items-center mb-1">
-                            <span className="text-slate-300 font-semibold">{featName}</span>
+                            <span className="text-content-secondary font-semibold">{featName}</span>
                             <span className="text-secondary font-bold">{featWeight.toFixed(1)}%</span>
                           </div>
                           <div className="w-full bg-surface-highest h-2 rounded-full overflow-hidden">
                             <div
-                              className="bg-secondary h-full rounded-full transition-all duration-500"
+                              className="bg-secondary h-full rounded-full transition-[width] duration-500"
                               style={{ width: `${Math.min(100, Math.max(2, featWeight))}%` }}
                             />
                           </div>
                         </div>
                       ))
                   ) : (
-                    <div className="text-slate-500 text-center py-4">Loading model feature importances...</div>
+                    <div className="text-content-muted text-center py-4">Loading model feature importances...</div>
                   )}
                 </div>
               </div>
@@ -2938,7 +2902,7 @@ function App() {
               <div className="flex justify-end">
                 <button
                   onClick={createExperiment}
-                  className="px-3 py-1.5 bg-secondary text-slate-950 font-mono text-xs font-bold rounded-lg hover:bg-secondary-light flex items-center gap-1.5"
+                  className="px-3 py-1.5 bg-secondary text-surface-deep font-mono text-xs font-bold rounded-lg hover:bg-secondary-light flex items-center gap-1.5"
                 >
                   <Play className="w-3.5 h-3.5 fill-current" />
                   <span>Launch New Benchmark Run</span>
@@ -2957,7 +2921,7 @@ function App() {
                   <BookOpen className="w-5 h-5 text-primary" />
                   <span>Computer Networks (CN) Viva & Academic Defense Hub</span>
                 </div>
-                <p className="text-xs text-slate-400 font-sans mt-1">
+                <p className="text-xs text-content-secondary font-sans mt-1">
                   Theoretical foundations, mathematical formulations, and answers to standard examination questions for project defense.
                 </p>
               </div>
@@ -2966,49 +2930,49 @@ function App() {
               <div className="grid grid-cols-1 md:grid-cols-2 gap-4 font-mono text-xs">
                 {/* Topic 1: L4 vs L7 */}
                 <div className="bg-surface border border-border-subtle rounded-xl p-4">
-                  <h4 className="font-bold text-slate-100 flex items-center gap-1.5 text-sm mb-2 text-primary">
+                  <h4 className="font-bold text-content-primary flex items-center gap-1.5 text-sm mb-2 text-primary">
                     <span>1. Layer 4 vs Layer 7 Load Balancing</span>
                   </h4>
-                  <p className="text-slate-300 font-sans text-xs leading-relaxed">
+                  <p className="text-content-secondary font-sans text-xs leading-relaxed">
                     <strong>Layer 4 (Transport):</strong> Routes packets based on IP/TCP port hashes without inspecting packet payloads. Fast, but blind to HTTP methods, headers, or execution complexity.
                   </p>
-                  <p className="text-slate-300 font-sans text-xs leading-relaxed mt-2">
+                  <p className="text-content-secondary font-sans text-xs leading-relaxed mt-2">
                     <strong>Layer 7 (Application - NET//PULSE):</strong> Terminates HTTP/1.1 connections, inspects request headers (e.g. <code className="text-primary">request_class</code>), and routes using contextual telemetry and ML inference.
                   </p>
                 </div>
 
                 {/* Topic 2: EWMA Formula */}
                 <div className="bg-surface border border-border-subtle rounded-xl p-4">
-                  <h4 className="font-bold text-slate-100 flex items-center gap-1.5 text-sm mb-2 text-secondary">
+                  <h4 className="font-bold text-content-primary flex items-center gap-1.5 text-sm mb-2 text-secondary">
                     <span>2. Mathematical Formulation: EWMA</span>
                   </h4>
-                  <p className="text-slate-300 font-sans text-xs leading-relaxed">
+                  <p className="text-content-secondary font-sans text-xs leading-relaxed">
                     Exponentially Weighted Moving Average filters high-frequency network jitter while capturing persistent latency degradation:
                   </p>
-                  <div className="bg-surface-high p-2 rounded mt-2 text-secondary font-mono text-[11px] text-center">
+                  <div className="bg-surface-high p-2 rounded mt-2 text-secondary font-mono text-xs text-center">
                     S_t = α · Y_t + (1 - α) · S_{"{t-1}"}
                   </div>
-                  <p className="text-slate-400 font-sans text-[11px] mt-1.5">
+                  <p className="text-content-secondary font-sans text-xs mt-1.5">
                     Where α = 0.3. This ensures sudden transient blips do not over-penalize a node, while sustained slowdowns (like Worker B) are immediately detected.
                   </p>
                 </div>
 
                 {/* Topic 3: The Straggler Problem */}
                 <div className="bg-surface border border-border-subtle rounded-xl p-4">
-                  <h4 className="font-bold text-slate-100 flex items-center gap-1.5 text-sm mb-2 text-amber">
+                  <h4 className="font-bold text-content-primary flex items-center gap-1.5 text-sm mb-2 text-amber">
                     <span>3. Straggler Problem & Tail Latency</span>
                   </h4>
-                  <p className="text-slate-300 font-sans text-xs leading-relaxed">
+                  <p className="text-content-secondary font-sans text-xs leading-relaxed">
                     In distributed systems, <strong>tail latency (P95 / P99)</strong> dictates user satisfaction. If 1 node out of 3 is 4x slower, a cyclic load balancer guarantees that 33% of requests experience latency stalls, inflating P95 from 18ms to 62ms!
                   </p>
                 </div>
 
                 {/* Topic 4: Circuit Breaker & Safe Fallback */}
                 <div className="bg-surface border border-border-subtle rounded-xl p-4">
-                  <h4 className="font-bold text-slate-100 flex items-center gap-1.5 text-sm mb-2 text-tertiary">
+                  <h4 className="font-bold text-content-primary flex items-center gap-1.5 text-sm mb-2 text-tertiary">
                     <span>4. Zero-Downtime Safe Fallback</span>
                   </h4>
-                  <p className="text-slate-300 font-sans text-xs leading-relaxed">
+                  <p className="text-content-secondary font-sans text-xs leading-relaxed">
                     If Python ML inference encounters an exception, NaN prediction, or missing model artifact, the system automatically falls back to <strong>Least Connections</strong> in &lt;0.2ms, guaranteeing zero dropped HTTP requests.
                   </p>
                 </div>
@@ -3016,7 +2980,7 @@ function App() {
 
               {/* Rapid-Fire Viva Q&A Accordion */}
               <div className="bg-surface border border-border-subtle rounded-xl p-5">
-                <h4 className="font-mono text-sm font-bold text-slate-100 uppercase mb-4 flex items-center gap-2">
+                <h4 className="font-mono text-sm font-bold text-content-primary uppercase mb-4 flex items-center gap-2">
                   <Award className="w-4 h-4 text-primary" />
                   <span>Frequently Asked Viva Questions & Answers</span>
                 </h4>
@@ -3052,15 +3016,15 @@ function App() {
                         onClick={() => setExpandedFaq(expandedFaq === index ? null : index)}
                         className="w-full p-3.5 flex items-center justify-between text-left hover:bg-surface-high/50 transition-colors"
                       >
-                        <span className="font-mono font-bold text-slate-200">{item.q}</span>
+                        <span className="font-mono font-bold text-content-primary">{item.q}</span>
                         {expandedFaq === index ? (
-                          <ChevronUp className="w-4 h-4 text-slate-400 shrink-0" />
+                          <ChevronUp className="w-4 h-4 text-content-secondary shrink-0" />
                         ) : (
-                          <ChevronDown className="w-4 h-4 text-slate-400 shrink-0" />
+                          <ChevronDown className="w-4 h-4 text-content-secondary shrink-0" />
                         )}
                       </button>
                       {expandedFaq === index && (
-                        <div className="p-3.5 pt-0 text-slate-300 border-t border-border-subtle/50 font-sans leading-relaxed">
+                        <div className="p-3.5 pt-0 text-content-secondary border-t border-border-subtle/50 font-sans leading-relaxed">
                           {item.a}
                         </div>
                       )}
@@ -3080,7 +3044,7 @@ function App() {
                     <Activity className="w-4 h-4" />
                     <span>1. Autonomous Telemetry</span>
                   </div>
-                  <p className="text-slate-400 leading-relaxed font-sans text-xs">
+                  <p className="text-content-secondary leading-relaxed font-sans text-xs">
                     Every node continuously samples CPU usage, memory, and in-flight queue depth. The reverse proxy runs an autonomous 15s background health prober to keep telemetry fresh without requiring manual intervention.
                   </p>
                 </div>
@@ -3090,7 +3054,7 @@ function App() {
                     <Cpu className="w-4 h-4" />
                     <span>2. ML Latency Regression</span>
                   </div>
-                  <p className="text-slate-400 leading-relaxed font-sans text-xs">
+                  <p className="text-content-secondary leading-relaxed font-sans text-xs">
                     A Scikit-Learn Random Forest Regressor models non-linear latency curves based on current node health features and incoming workload class. It predicts exact completion time for each candidate.
                   </p>
                 </div>
@@ -3100,7 +3064,7 @@ function App() {
                     <ShieldCheck className="w-4 h-4" />
                     <span>3. Safe Fallback Guarantee</span>
                   </div>
-                  <p className="text-slate-400 leading-relaxed font-sans text-xs">
+                  <p className="text-content-secondary leading-relaxed font-sans text-xs">
                     If the AI model is uncalibrated, encounters corrupted artifacts, or exceeds inference timeouts, the router automatically fails over to Least Connections, ensuring zero dropped requests.
                   </p>
                 </div>
@@ -3113,13 +3077,13 @@ function App() {
             <div className="p-6 flex flex-col gap-6">
               {/* Top Action Bar */}
               <div className="flex items-center justify-between no-print">
-                <div className="flex items-center gap-2 text-xs font-mono text-slate-400">
+                <div className="flex items-center gap-2 text-xs font-mono text-content-secondary">
                   <Printer className="w-4 h-4 text-primary" />
                   <span>Formatted for Standard A4 Institutional Archival & Academic Printing</span>
                 </div>
                 <button
                   onClick={() => window.print()}
-                  className="px-4 py-2 bg-primary hover:bg-primary-light text-slate-950 font-mono text-xs font-bold rounded-lg transition-all flex items-center gap-2 "
+                  className="px-4 py-2 bg-primary hover:bg-primary-light text-surface-deep font-mono text-xs font-bold rounded-lg transition-colors duration-150 flex items-center gap-2 "
                 >
                   <Printer className="w-4 h-4" />
                   <span>Print / Save PDF Dossier</span>
@@ -3127,45 +3091,45 @@ function App() {
               </div>
 
               {/* Printable Document Sheet */}
-              <div className="bg-surface border border-border-subtle rounded-xl p-8 print-card flex flex-col gap-6 max-w-4xl mx-auto w-full text-slate-100">
+              <div className="bg-surface border border-border-subtle rounded-xl p-8 print-card flex flex-col gap-6 max-w-4xl mx-auto w-full text-content-primary">
                 {/* Header */}
                 <div className="border-b-2 border-primary/50 pb-5 flex flex-col sm:flex-row sm:items-center justify-between gap-4">
                   <div>
-                    <h2 className="font-mono text-xl font-bold tracking-tight text-slate-100">
+                    <h2 className="font-mono text-xl font-bold tracking-tight text-content-primary">
                       KARNAVATI UNIVERSITY
                     </h2>
                     <h3 className="font-mono text-sm font-semibold text-primary mt-0.5">
                       Unitedworld Institute of Technology (UIT) • NAAC Grade A+
                     </h3>
-                    <p className="text-xs text-slate-400 font-sans mt-1">
+                    <p className="text-xs text-content-secondary font-sans mt-1">
                       Department of Computer Science & Engineering • CS433 Computer Networks
                     </p>
                   </div>
-                  <div className="text-right font-mono text-xs text-slate-400">
+                  <div className="text-right font-mono text-xs text-content-secondary">
                     <span className="px-2.5 py-1 bg-surface-high border border-border text-secondary font-bold rounded block">
                       OFFICIAL DOSSIER
                     </span>
-                    <span className="mt-1 block text-[11px]">Academic Year 2026-27</span>
+                    <span className="mt-1 block text-xs">Academic Year 2026-27</span>
                   </div>
                 </div>
 
                 {/* Metadata Row */}
                 <div className="grid grid-cols-2 sm:grid-cols-4 gap-4 p-4 bg-surface-low rounded-lg border border-border-subtle text-xs font-mono">
                   <div>
-                    <span className="text-slate-500 block uppercase text-[10px]">Project Title</span>
-                    <span className="font-bold text-slate-200">AI-Based Load Balancer</span>
+                    <span className="text-content-muted block uppercase text-xs">Project Title</span>
+                    <span className="font-bold text-content-primary">AI-Based Load Balancer</span>
                   </div>
                   <div>
-                    <span className="text-slate-500 block uppercase text-[10px]">Student Name</span>
-                    <span className="font-bold text-slate-200">Krishna Modi</span>
+                    <span className="text-content-muted block uppercase text-xs">Student Name</span>
+                    <span className="font-bold text-content-primary">Krishna Modi</span>
                   </div>
                   <div>
-                    <span className="text-slate-500 block uppercase text-[10px]">Enrollment No.</span>
-                    <span className="font-bold text-slate-200">202307010006</span>
+                    <span className="text-content-muted block uppercase text-xs">Enrollment No.</span>
+                    <span className="font-bold text-content-primary">202307010006</span>
                   </div>
                   <div>
-                    <span className="text-slate-500 block uppercase text-[10px]">Faculty Mentor</span>
-                    <span className="font-bold text-slate-200">Ms. Pragya Vats</span>
+                    <span className="text-content-muted block uppercase text-xs">Faculty Mentor</span>
+                    <span className="font-bold text-content-primary">Ms. Pragya Vats</span>
                   </div>
                 </div>
 
@@ -3174,7 +3138,7 @@ function App() {
                   <h4 className="font-mono text-sm font-bold text-primary uppercase mb-2">
                     1. Executive System Summary
                   </h4>
-                  <p className="text-xs text-slate-300 font-sans leading-relaxed">
+                  <p className="text-xs text-content-secondary font-sans leading-relaxed">
                     This engineering project implements an enterprise Layer-7 Adaptive Load Balancer combining classical network scheduling (Round Robin, Weighted Round Robin, Least Connections, Consistent Hashing) with machine learning inference (Random Forest Regressor). In heterogeneous server clusters where node latency varies by 4x (Worker A at 15ms vs Worker B at 60ms), classical cyclic policies blindly incur severe tail latency spikes. By sampling 8 live telemetry features (CPU, memory, active in-flight requests, EWMA latency, network RTT, error rates, capacity weights, and request complexity), the predictive engine forecasts server execution delay prior to packet dispatch, effectively bypassing stragglers and cutting P95 tail latency by over 50%.
                   </p>
                 </div>
@@ -3185,7 +3149,7 @@ function App() {
                     2. Balancing Algorithm Specifications & Empirical Performance
                   </h4>
                   <table className="w-full text-left font-mono text-xs border border-border-subtle">
-                    <thead className="bg-surface-high text-slate-300 text-[11px]">
+                    <thead className="bg-surface-high text-content-secondary text-xs">
                       <tr>
                         <th className="py-2 px-3 border-b border-border-subtle">Algorithm</th>
                         <th className="py-2 px-3 border-b border-border-subtle">Decision Logic</th>
@@ -3194,7 +3158,7 @@ function App() {
                         <th className="py-2 px-3 border-b border-border-subtle">Straggler Avoidance</th>
                       </tr>
                     </thead>
-                    <tbody className="divide-y divide-border-subtle text-slate-300">
+                    <tbody className="divide-y divide-border-subtle text-content-secondary">
                       <tr>
                         <td className="py-2 px-3 font-bold">Round Robin</td>
                         <td className="py-2 px-3 font-sans">Cyclic modulo index</td>
@@ -3241,37 +3205,37 @@ function App() {
                   </h4>
                   <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 font-mono text-xs">
                     <div className="p-3 bg-surface-low rounded border border-border-subtle">
-                      <span className="text-slate-400 block text-[11px]">Active Breaker Policy</span>
+                      <span className="text-content-secondary block text-xs">Active Breaker Policy</span>
                       <strong className="text-secondary text-sm">Outlier Ejection (Envoy)</strong>
-                      <p className="text-[10px] text-slate-500 font-sans mt-1">Ejects after 3 consecutive failures or &gt;85ms EWMA latency.</p>
+                      <p className="text-xs text-content-muted font-sans mt-1">Ejects after 3 consecutive failures or &gt;85ms EWMA latency.</p>
                     </div>
                     <div className="p-3 bg-surface-low rounded border border-border-subtle">
-                      <span className="text-slate-400 block text-[11px]">Canary Recovery Probe</span>
+                      <span className="text-content-secondary block text-xs">Canary Recovery Probe</span>
                       <strong className="text-secondary text-sm">15.0s Cooldown</strong>
-                      <p className="text-[10px] text-slate-500 font-sans mt-1">Automated HALF_OPEN canary transition validates health recovery.</p>
+                      <p className="text-xs text-content-muted font-sans mt-1">Automated HALF_OPEN canary transition validates health recovery.</p>
                     </div>
                     <div className="p-3 bg-surface-low rounded border border-border-subtle">
-                      <span className="text-slate-400 block text-[11px]">Degradation Safe-Mode</span>
+                      <span className="text-content-secondary block text-xs">Degradation Safe-Mode</span>
                       <strong className="text-secondary text-sm">Zero Blackhole Fallback</strong>
-                      <p className="text-[10px] text-slate-500 font-sans mt-1">If all nodes trip OPEN, traffic degrades evenly across fleet.</p>
+                      <p className="text-xs text-content-muted font-sans mt-1">If all nodes trip OPEN, traffic degrades evenly across fleet.</p>
                     </div>
                   </div>
                 </div>
 
                 {/* Institutional Verification Footer */}
-                <div className="pt-6 border-t border-border-subtle flex flex-col sm:flex-row items-center justify-between text-xs font-mono text-slate-400 gap-4">
+                <div className="pt-6 border-t border-border-subtle flex flex-col sm:flex-row items-center justify-between text-xs font-mono text-content-secondary gap-4">
                   <div>
                     <span>Project Evaluation Grade: </span>
                     <strong className="text-secondary">APPROVED (Phase 1-6 Engineering Verified)</strong>
                   </div>
                   <div className="flex items-center gap-6">
                     <div className="text-center">
-                      <div className="w-32 border-b border-slate-600 mb-1" />
-                      <span className="text-[10px]">Student Signature</span>
+                      <div className="w-32 border-b border-border mb-1" />
+                      <span className="text-xs">Student Signature</span>
                     </div>
                     <div className="text-center">
-                      <div className="w-32 border-b border-slate-600 mb-1" />
-                      <span className="text-[10px]">Faculty Mentor Signature</span>
+                      <div className="w-32 border-b border-border mb-1" />
+                      <span className="text-xs">Faculty Mentor Signature</span>
                     </div>
                   </div>
                 </div>
@@ -3292,13 +3256,13 @@ function App() {
           onClick={(e) => {
             if (e.target === e.currentTarget) setSelectedDecision(null);
           }}
-          className="fixed inset-0 z-50 bg-slate-950/80 backdrop-blur-sm flex items-center justify-center p-4"
+          className="fixed inset-0 z-50 bg-surface-deep/80 backdrop-blur-sm flex items-center justify-center p-4"
         >
           <div className="bg-surface border border-border rounded-xl max-w-lg w-full p-6 font-mono text-xs shadow-2xl flex flex-col gap-4">
             <div className="flex items-center justify-between pb-3 border-b border-border-subtle">
               <div className="flex items-center gap-2">
                 <Activity className="w-4 h-4 text-primary" />
-                <h4 id="decision-inspector-title" className="font-bold text-sm text-slate-100 uppercase">
+                <h4 id="decision-inspector-title" className="font-bold text-sm text-content-primary uppercase">
                   Routing Decision Inspector
                 </h4>
               </div>
@@ -3313,28 +3277,28 @@ function App() {
 
             <div className="space-y-2">
               <div className="flex justify-between">
-                <span className="text-slate-400">Request ID:</span>
-                <span className="text-slate-200">{selectedDecision.request_id}</span>
+                <span className="text-content-secondary">Request ID:</span>
+                <span className="text-content-primary">{selectedDecision.request_id}</span>
               </div>
               <div className="flex justify-between">
-                <span className="text-slate-400">Policy:</span>
+                <span className="text-content-secondary">Policy:</span>
                 <span className="text-primary uppercase font-bold">{selectedDecision.policy}</span>
               </div>
               <div className="flex justify-between">
-                <span className="text-slate-400">Target Node:</span>
+                <span className="text-content-secondary">Target Node:</span>
                 <span className="text-secondary uppercase font-bold">
                   {backends.find((b) => b.id === selectedDecision.selected_backend_id)?.name ||
                     selectedDecision.selected_backend_id}
                 </span>
               </div>
               <div className="flex justify-between">
-                <span className="text-slate-400">Actual Response Latency:</span>
-                <span className="text-slate-100 font-bold">
+                <span className="text-content-secondary">Actual Response Latency:</span>
+                <span className="text-content-primary font-bold">
                   {selectedDecision.actual_latency_ms?.toFixed(2)} ms
                 </span>
               </div>
               <div className="flex justify-between">
-                <span className="text-slate-400">AI Predicted Latency:</span>
+                <span className="text-content-secondary">AI Predicted Latency:</span>
                 <span className="text-primary font-bold">
                   {selectedDecision.predicted_latency_ms !== null && selectedDecision.predicted_latency_ms !== undefined
                     ? `${selectedDecision.predicted_latency_ms.toFixed(2)} ms`
@@ -3342,21 +3306,21 @@ function App() {
                 </span>
               </div>
               <div className="flex justify-between">
-                <span className="text-slate-400">Status Code:</span>
+                <span className="text-content-secondary">Status Code:</span>
                 <span className="text-secondary font-bold">{selectedDecision.status_code || 200}</span>
               </div>
               <div className="flex justify-between">
-                <span className="text-slate-400">Workload Class:</span>
-                <span className="text-slate-200 uppercase">{selectedDecision.request_class || "normal"}</span>
+                <span className="text-content-secondary">Workload Class:</span>
+                <span className="text-content-primary uppercase">{selectedDecision.request_class || "normal"}</span>
               </div>
             </div>
 
             {selectedDecision.features_json && (
               <div className="mt-2 pt-3 border-t border-border-subtle">
-                <span className="text-slate-400 font-bold block mb-1.5 uppercase text-[11px]">
+                <span className="text-content-secondary font-bold block mb-1.5 uppercase text-xs">
                   Evaluated Node Telemetry Features
                 </span>
-                <pre className="bg-surface-low p-3 rounded text-[11px] text-slate-300 overflow-x-auto">
+                <pre className="bg-surface-low p-3 rounded text-xs text-content-secondary overflow-x-auto">
                   {JSON.stringify(selectedDecision.features_json, null, 2)}
                 </pre>
               </div>
@@ -3365,7 +3329,7 @@ function App() {
             <div className="mt-2 flex justify-end">
               <button
                 onClick={() => setSelectedDecision(null)}
-                className="px-4 py-1.5 bg-primary text-slate-950 font-bold rounded hover:bg-primary-light"
+                className="px-4 py-1.5 bg-primary text-surface-deep font-bold rounded hover:bg-primary-light"
               >
                 Close
               </button>
@@ -3377,14 +3341,14 @@ function App() {
       {/* ---------------------------------------------------- */}
       {/* 3. NOC FOOTER                                        */}
       {/* ---------------------------------------------------- */}
-      <footer className="border-t border-border-subtle bg-surface-lowest px-6 py-3 text-xs font-mono text-slate-500 flex flex-col sm:flex-row items-center justify-between gap-2">
+      <footer className="border-t border-border-subtle bg-surface-lowest px-6 py-3 text-xs font-mono text-content-muted flex flex-col sm:flex-row items-center justify-between gap-2">
         <div className="flex items-center gap-3">
           <span className="w-2 h-2 rounded-full bg-secondary" />
           <span>Layer-7 Adaptive Load Balancer v1.2.0</span>
           <span>•</span>
           <span>FastAPI + PostgreSQL 16 + Scikit-Learn RandomForestRegressor</span>
         </div>
-        <div className="flex items-center gap-4 text-slate-400">
+        <div className="flex items-center gap-4 text-content-secondary">
           <a href={`${api}/api/v1/metrics/summary`} target="_blank" rel="noreferrer" className="hover:text-primary">
             Metrics Summary ↗
           </a>
@@ -3418,7 +3382,7 @@ function OptimalPathSVG({
   const isC = activeWorker === "worker-c";
 
   return (
-    <div className="w-full max-w-[760px] flex flex-col items-center">
+    <div className="w-full max-w-3xl flex flex-col items-center">
       <svg
         viewBox="0 0 760 260"
         className="w-full h-auto select-none"
@@ -3631,10 +3595,10 @@ function ExperimentMatrixSection({
 
   if (!completed.length) {
     return (
-      <div className="text-center py-12 text-slate-500 font-mono">
-        <BarChart3 className="w-8 h-8 text-slate-600 mx-auto mb-2" />
+      <div className="text-center py-12 text-content-muted font-mono">
+        <BarChart3 className="w-8 h-8 text-content-muted mx-auto mb-2" />
         <p>No completed benchmark experiments found.</p>
-        <p className="text-xs text-slate-600 mt-1">Click "Launch New Benchmark Run" above to record automated multi-workload comparisons.</p>
+        <p className="text-xs text-content-muted mt-1">Click "Launch New Benchmark Run" above to record automated multi-workload comparisons.</p>
       </div>
     );
   }
@@ -3645,14 +3609,14 @@ function ExperimentMatrixSection({
       <div className="lg:col-span-2 flex flex-col gap-4">
         <div className="border-b border-border-subtle pb-2 flex items-center justify-between">
           <div>
-            <h3 className="font-mono text-sm font-bold text-slate-100 uppercase">
+            <h3 className="font-mono text-sm font-bold text-content-primary uppercase">
               P95 Response Latency Comparison (Lower is Better)
             </h3>
-            <p className="text-xs text-slate-400 font-mono">
+            <p className="text-xs text-content-secondary font-mono">
               Controlled multi-workload benchmark evaluation runs across policies.
             </p>
           </div>
-          <span className="text-[10px] font-mono px-2 py-0.5 bg-surface-high border border-border text-slate-400">
+          <span className="text-xs font-mono px-2 py-0.5 bg-surface-high border border-border text-content-secondary">
             N={completed.length} RUNS
           </span>
         </div>
@@ -3671,24 +3635,24 @@ function ExperimentMatrixSection({
                   <div className="flex items-center gap-2">
                     <span
                       className={`w-2 h-2 rounded-full ${
-                        isAI ? "bg-primary" : isLC ? "bg-tertiary" : "bg-slate-400"
+                        isAI ? "bg-primary" : isLC ? "bg-tertiary" : "bg-content-muted"
                       }`}
                     />
-                    <strong className="text-slate-200">
+                    <strong className="text-content-primary">
                       {e.policy.replace(/_/g, " ").toUpperCase()} • {e.workload_profile} (r{e.repetition})
                     </strong>
                   </div>
-                  <span className="font-bold text-slate-100">{formatNumber(val, 1, " ms")}</span>
+                  <span className="font-bold text-content-primary">{formatNumber(val, 1, " ms")}</span>
                 </div>
                 <div className="w-full bg-surface-highest h-3 rounded overflow-hidden">
                   <div
-                    className={`h-full rounded transition-all duration-500 ${
-                      isAI ? "bg-primary" : isLC ? "bg-tertiary" : "bg-slate-500"
+                    className={`h-full rounded transition-[width] duration-500 ${
+                      isAI ? "bg-primary" : isLC ? "bg-tertiary" : "bg-content-muted"
                     }`}
                     style={{ width: `${pct}%` }}
                   />
                 </div>
-                <div className="flex justify-between items-center text-[10px] text-slate-500 mt-1">
+                <div className="flex justify-between items-center text-xs text-content-muted mt-1">
                   <span>Throughput: {formatNumber(e.metric?.throughput_rps, 1, " req/s")}</span>
                   <span>Requests: {e.metric?.request_count}</span>
                   <span>Errors: {formatNumber((e.metric?.error_rate || 0) * 100, 1, "%")}</span>
@@ -3704,28 +3668,28 @@ function ExperimentMatrixSection({
         <div>
           <div className="flex items-center gap-2 border-b border-border-subtle pb-3 mb-4">
             <ShieldCheck className="w-4 h-4 text-secondary" />
-            <h4 className="font-mono text-sm font-bold text-slate-100 uppercase">
+            <h4 className="font-mono text-sm font-bold text-content-primary uppercase">
               Scientific Findings
             </h4>
           </div>
 
-          <div className="space-y-4 font-mono text-xs text-slate-300">
+          <div className="space-y-4 font-mono text-xs text-content-secondary">
             <div className="p-3 bg-surface-high border border-border rounded-lg">
-              <span className="text-[11px] text-content-muted block font-medium">
+              <span className="text-xs text-content-muted block font-medium">
                 Heterogeneous asymmetry
               </span>
               <div className="text-lg font-bold text-secondary mt-0.5">AI Optimal</div>
-              <p className="text-[11px] text-slate-400 mt-1 font-sans">
+              <p className="text-xs text-content-secondary mt-1 font-sans">
                 Under unequal node delays (15ms vs 60ms), Random Forest latency prediction avoids queue build-up on slow workers.
               </p>
             </div>
 
             <div className="p-3 bg-surface-high border border-border rounded-lg">
-              <span className="text-[11px] text-content-muted block font-medium">
+              <span className="text-xs text-content-muted block font-medium">
                 Inference latency overhead
               </span>
               <div className="text-lg font-bold text-amber mt-0.5">~1-2 ms / eval</div>
-              <p className="text-[11px] text-slate-400 mt-1 font-sans">
+              <p className="text-xs text-content-secondary mt-1 font-sans">
                 In exchange for 1.5ms evaluation overhead, AI avoids the 45ms Worker B penalty, cutting P95 tail latency by over 50%.
               </p>
             </div>
