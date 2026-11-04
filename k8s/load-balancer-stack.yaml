@@ -1,0 +1,252 @@
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: ai-load-balancer
+---
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: proxy-config
+  namespace: ai-load-balancer
+data:
+  DATABASE_URL: "postgresql://postgres:postgres@postgres-service:5432/load_balancer"
+  ROUTING_POLICY: "ai_latency"
+  LOG_LEVEL: "INFO"
+---
+# ----------------------------------------------------
+# 1. Heterogeneous Worker Fleet
+# ----------------------------------------------------
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: worker-a
+  namespace: ai-load-balancer
+  labels:
+    app: worker-a
+    tier: fast-tier
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: worker-a
+  template:
+    metadata:
+      labels:
+        app: worker-a
+    spec:
+      containers:
+        - name: worker-a
+          image: python:3.11-slim
+          command: ["uvicorn", "app:app", "--host", "0.0.0.0", "--port", "8001"]
+          env:
+            - name: BASE_DELAY_MS
+              value: "15"
+            - name: CAPACITY_WEIGHT
+              value: "2"
+          ports:
+            - containerPort: 8001
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: worker-a-service
+  namespace: ai-load-balancer
+spec:
+  selector:
+    app: worker-a
+  ports:
+    - protocol: TCP
+      port: 8001
+      targetPort: 8001
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: worker-b
+  namespace: ai-load-balancer
+  labels:
+    app: worker-b
+    tier: straggler-tier
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: worker-b
+  template:
+    metadata:
+      labels:
+        app: worker-b
+    spec:
+      containers:
+        - name: worker-b
+          image: python:3.11-slim
+          command: ["uvicorn", "app:app", "--host", "0.0.0.0", "--port", "8002"]
+          env:
+            - name: BASE_DELAY_MS
+              value: "60"
+            - name: CAPACITY_WEIGHT
+              value: "1"
+          ports:
+            - containerPort: 8002
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: worker-b-service
+  namespace: ai-load-balancer
+spec:
+  selector:
+    app: worker-b
+  ports:
+    - protocol: TCP
+      port: 8002
+      targetPort: 8002
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: worker-c
+  namespace: ai-load-balancer
+  labels:
+    app: worker-c
+    tier: balanced-tier
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: worker-c
+  template:
+    metadata:
+      labels:
+        app: worker-c
+    spec:
+      containers:
+        - name: worker-c
+          image: python:3.11-slim
+          command: ["uvicorn", "app:app", "--host", "0.0.0.0", "--port", "8003"]
+          env:
+            - name: BASE_DELAY_MS
+              value: "30"
+            - name: CAPACITY_WEIGHT
+              value: "1"
+          ports:
+            - containerPort: 8003
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: worker-c-service
+  namespace: ai-load-balancer
+spec:
+  selector:
+    app: worker-c
+  ports:
+    - protocol: TCP
+      port: 8003
+      targetPort: 8003
+---
+# ----------------------------------------------------
+# 2. Layer-7 Proxy Control Plane
+# ----------------------------------------------------
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: l7-proxy
+  namespace: ai-load-balancer
+spec:
+  replicas: 2
+  selector:
+    matchLabels:
+      app: l7-proxy
+  template:
+    metadata:
+      labels:
+        app: l7-proxy
+    spec:
+      containers:
+        - name: proxy
+          image: ai-load-balancer-backend:latest
+          command: ["uvicorn", "app.main:app", "--host", "0.0.0.0", "--port", "8000"]
+          ports:
+            - containerPort: 8000
+          envFrom:
+            - configMapRef:
+                name: proxy-config
+          readinessProbe:
+            httpGet:
+              path: /health/ready
+              port: 8000
+            initialDelaySeconds: 5
+            periodSeconds: 10
+          livenessProbe:
+            httpGet:
+              path: /health/live
+              port: 8000
+            initialDelaySeconds: 5
+            periodSeconds: 15
+          resources:
+            requests:
+              cpu: "250m"
+              memory: "512Mi"
+            limits:
+              cpu: "1000m"
+              memory: "1Gi"
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: l7-proxy-service
+  namespace: ai-load-balancer
+spec:
+  type: ClusterIP
+  selector:
+    app: l7-proxy
+  ports:
+    - protocol: TCP
+      port: 8000
+      targetPort: 8000
+---
+# ----------------------------------------------------
+# 3. Operational Cockpit (Frontend)
+# ----------------------------------------------------
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: frontend-cockpit
+  namespace: ai-load-balancer
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: frontend-cockpit
+  template:
+    metadata:
+      labels:
+        app: frontend-cockpit
+    spec:
+      containers:
+        - name: frontend
+          image: ai-load-balancer-frontend:latest
+          ports:
+            - containerPort: 80
+          resources:
+            requests:
+              cpu: "100m"
+              memory: "128Mi"
+            limits:
+              cpu: "500m"
+              memory: "256Mi"
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: frontend-service
+  namespace: ai-load-balancer
+spec:
+  type: LoadBalancer
+  selector:
+    app: frontend-cockpit
+  ports:
+    - protocol: TCP
+      port: 80
+      targetPort: 80
